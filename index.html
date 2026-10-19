@@ -3,34 +3,32 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Akrap v2 - Bağlantı testi</title>
+<title>Akrap</title>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <style>
-body{font:16px system-ui,sans-serif;margin:0;padding:16px;background:#f1f5f9;color:#0f172a}
-.card{background:#fff;border-radius:12px;padding:16px;max-width:480px;margin:0 auto 12px}
-input{width:100%;padding:10px;margin:6px 0 12px;font:inherit;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:8px}
-button{padding:10px 14px;font:inherit;border:0;border-radius:8px;background:#1e40af;color:#fff;cursor:pointer;margin-right:6px}
+*{box-sizing:border-box}
+body{margin:0;font:16px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;background:#eef2f7;color:#0f172a;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0)}
+main{max-width:520px;margin:0 auto;padding:16px}
+.card{background:#fff;border-radius:14px;padding:18px;margin-bottom:14px;box-shadow:0 1px 3px rgba(15,23,42,.08)}
+h1{font-size:22px;margin:4px 0 12px}
+h2{font-size:17px;margin:0 0 8px}
+label{display:block;font-size:13px;color:#475569;margin-top:10px}
+input{width:100%;padding:11px;margin-top:4px;font:inherit;border:1px solid #cbd5e1;border-radius:10px}
+button{width:100%;padding:12px;margin-top:12px;font:inherit;font-weight:600;border:0;border-radius:10px;background:#1e40af;color:#fff;cursor:pointer}
+button.ghost{background:#e2e8f0;color:#0f172a}
 button:disabled{opacity:.5}
-pre{background:#f8fafc;padding:10px;border-radius:8px;white-space:pre-wrap;word-break:break-word;min-height:40px;font-size:13px}
+.muted{color:#64748b;font-size:14px}
+.err{color:#b91c1c;font-size:14px;margin-top:8px;min-height:18px}
+.ok{color:#15803d;font-size:14px;margin-top:8px;min-height:18px}
+.uid{word-break:break-all;background:#f1f5f9;padding:8px;border-radius:8px;font-size:13px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.badge{font-size:12px;background:#dbeafe;color:#1e40af;padding:3px 9px;border-radius:99px}
 </style>
 </head>
 <body>
-<div class="card">
-  <h2 style="margin-top:0">Bağlantı testi</h2>
-  <div id="loginBox">
-    <label>E-posta<input id="em" type="email" autocomplete="username"></label>
-    <label>Şifre<input id="pw" type="password" autocomplete="current-password"></label>
-    <button id="loginBtn">Giriş yap</button>
-  </div>
-  <div id="appBox" hidden>
-    <p id="who"></p>
-    <button id="testBtn">Firestore'a yaz ve oku</button>
-    <button id="outBtn">Çıkış</button>
-  </div>
-  <pre id="log"></pre>
-</div>
+<main id="app"><p class="muted">Yükleniyor…</p></main>
 
 <script>
 const firebaseConfig = {
@@ -45,37 +43,188 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
+const SYS_EMAILS = ["akrpersin@gmail.com"];
+
+const S = { ready: false, user: null, profile: null, office: null, flash: "", flashOk: false };
 const $ = id => document.getElementById(id);
-const log = m => { $("log").textContent += m + "\n"; };
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const phoneOk = p => { const d = String(p || "").replace(/\D/g, ""); return d.length >= 10 && d.length <= 13; };
+const ROLE_LABEL = { admin: "Ofis yöneticisi", member: "Danışman" };
+const AUTH_MSG = {
+  "auth/invalid-credential": "E-posta veya şifre hatalı.",
+  "auth/invalid-email": "E-posta adresi geçersiz.",
+  "auth/too-many-requests": "Çok fazla deneme. Biraz bekleyin.",
+  "auth/operation-not-allowed": "E-posta ile giriş etkin değil (Firebase ayarlarını kontrol edin)."
+};
 
-function showApp(u) {
-  $("loginBox").hidden = !!u;
-  $("appBox").hidden = !u;
-  $("who").textContent = u ? "Giriş: " + u.email : "";
+function slug(s) {
+  return String(s).toLowerCase()
+    .replace(/ğ/g,"g").replace(/ü/g,"u").replace(/ş/g,"s").replace(/ı/g,"i").replace(/ö/g,"o").replace(/ç/g,"c")
+    .replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,20) || "ofis";
 }
-// Oturum durumu değişince (dosya/content:// adreslerinde tetiklenmeyebilir)
-auth.onAuthStateChanged(u => { if (u) showApp(u); });
 
-$("loginBtn").onclick = async () => {
-  try {
-    const c = await auth.signInWithEmailAndPassword($("em").value.trim(), $("pw").value);
-    log("Giriş başarılı.");
-    showApp(c.user);   // düğmeyi doğrudan göster
+async function loadState() {
+  S.profile = null; S.office = null;
+  if (!S.user) return;
+  const sn = await db.collection("users").doc(S.user.uid).get();
+  if (sn.exists) {
+    S.profile = Object.assign({ id: S.user.uid }, sn.data());
+    if (S.profile.office) {
+      const o = await db.collection("offices").doc(S.profile.office).get();
+      S.office = o.exists ? Object.assign({ id: o.id }, o.data()) : null;
+    }
   }
-  catch (e) { log("Giriş hatası: " + e.code + " " + e.message); }
-};
-$("outBtn").onclick = () => auth.signOut();
+}
 
-$("testBtn").onclick = async () => {
+function setFlash(msg, ok) { S.flash = msg; S.flashOk = !!ok; render(); }
+
+function loginView() {
+  return `<div class="card">
+    <h1>Akrap'a giriş</h1>
+    <label>E-posta<input id="em" type="email" autocomplete="username"></label>
+    <label>Şifre<input id="pw" type="password" autocomplete="current-password"></label>
+    <button onclick="doLogin()">Giriş yap</button>
+    <div class="err">${esc(S.flash)}</div>
+  </div>`;
+}
+
+function setupView() {
+  const p = S.profile || {};
+  return `<div class="card">
+    <h2>Bilgilerinizi tamamlayın</h2>
+    <p class="muted">Ad ve telefon numarası zorunludur. Telefon müşterilere gönderilen bilgilerde kullanılır.</p>
+    <label>Ad soyad<input id="nm" value="${esc(p.name || "")}"></label>
+    <label>Telefon<input id="ph" type="tel" placeholder="05xx xxx xx xx" value="${esc(p.phone || "")}"></label>
+    <button onclick="saveProfile()">Kaydet</button>
+    <div class="ok">${S.flashOk ? esc(S.flash) : ""}</div>
+    <div class="err">${S.flashOk ? "" : esc(S.flash)}</div>
+  </div>
+  ${p.name && phoneOk(p.phone) ? "" : ""}
+  ${S.profile ? "" : newOfficeView()}
+  <div class="card"><p class="muted">Mevcut bir ofise katılmak için ofis yöneticiniz sizi ekleyecek. Yöneticinize aşağıdaki kimliği verin:</p>
+    <div class="uid">${esc(S.user.uid)}</div></div>
+  <button class="ghost" onclick="doLogout()">Çıkış yap</button>`;
+}
+
+function newOfficeView() {
+  return `<div class="card">
+    <h2>Yeni ofis aç</h2>
+    <p class="muted">Ofisinizi açtığınızda sistem yöneticisi onayı gerekir.</p>
+    <label>Ofis adı<input id="oname" placeholder="Örn. Ertan Taştan Mülk Ofisi"></label>
+    <button onclick="createOffice()">Ofis aç</button>
+  </div>`;
+}
+
+function waitingView() {
+  return `<div class="card">
+    <h2>${esc(S.office.name || "Ofis")}</h2>
+    <p class="muted">Ofisiniz sistem yöneticisi onayını bekliyor. Onaylandığında buradan devam edebilirsiniz.</p>
+  </div>
+  <button class="ghost" onclick="doLogout()">Çıkış yap</button>`;
+}
+
+function homeView() {
+  const p = S.profile;
+  const isAdmin = p.role === "admin";
+  return `<div class="card">
+    <div class="row"><h2>${esc(S.office.name)}</h2><span class="badge">${esc(ROLE_LABEL[p.role] || p.role)}</span></div>
+    <p class="muted">Merhaba ${esc(p.name)} · ${esc(p.phone)}</p>
+  </div>
+  <div class="card"><h2>Menü</h2>
+    <button disabled>Portföy (sonraki adım)</button>
+    <button disabled>Müşteriler (sonraki adım)</button>
+    ${isAdmin ? '<button disabled>Ofis yönetimi (sonraki adım)</button>' : ""}
+  </div>
+  <button class="ghost" onclick="doLogout()">Çıkış yap</button>`;
+}
+
+function render() {
+  const app = $("app");
+  if (!S.ready) { app.innerHTML = '<p class="muted">Yükleniyor…</p>'; return; }
+  if (!S.user) { app.innerHTML = loginView(); return; }
+  if (!S.profile || !phoneOk(S.profile.phone) || !S.profile.name) { app.innerHTML = setupView(); return; }
+  if (!S.office) {
+    app.innerHTML = `<div class="card"><p>Ofis bulunamadı. Yöneticinizle iletişime geçin.</p></div>
+      <button class="ghost" onclick="doLogout()">Çıkış yap</button>`;
+    return;
+  }
+  if (S.office.pending || S.office.disabled) { app.innerHTML = waitingView(); return; }
+  app.innerHTML = homeView();
+}
+
+async function doLogin() {
+  const em = $("em").value.trim(), pw = $("pw").value;
+  if (!em || !pw) return setFlash("E-posta ve şifre gerekli.", false);
   try {
-    const u = auth.currentUser;
-    if (!u) { log("Oturum bulunamadı. Önce giriş yapın."); return; }
-    const ref = db.collection("_baglanti_testi").doc(u.uid);
-    await ref.set({ at: firebase.firestore.FieldValue.serverTimestamp(), email: u.email });
-    const snap = await ref.get();
-    log("Yazma ve okuma başarılı: " + JSON.stringify(snap.data()));
-  } catch (e) { log("Firestore hatası: " + e.code + " " + e.message); }
-};
+    await auth.signInWithEmailAndPassword(em, pw);
+  } catch (e) {
+    setFlash(AUTH_MSG[e.code] || ("Giriş hatası: " + e.message), false);
+  }
+}
+
+async function doLogout() { await auth.signOut(); }
+
+async function saveProfile() {
+  const nm = $("nm").value.trim(), ph = $("ph").value.trim();
+  if (!nm) return setFlash("Ad soyad gerekli.", false);
+  if (!phoneOk(ph)) return setFlash("Geçerli bir telefon numarası girin (örn. 05xx xxx xx xx).", false);
+  try {
+    const ref = db.collection("users").doc(S.user.uid);
+    const sn = await ref.get();
+    if (sn.exists) {
+      await ref.update({ name: nm, phone: ph });
+    } else {
+      // Mevcut ofise bağlı değilse profil yalnızca ad ve telefonla oluşturulamaz (ofis gerekir); profil ofis açılırken oluşur.
+      S.pendingProfile = { name: nm, phone: ph };
+      return setFlash("Bilgiler kaydedildi. Şimdi ofisinizi açın.", true);
+    }
+    await refresh();
+    setFlash("Kaydedildi.", true);
+  } catch (e) {
+    setFlash("Kaydedilemedi: " + e.message, false);
+  }
+}
+
+async function createOffice() {
+  const oname = $("oname").value.trim();
+  const nm = (S.pendingProfile && S.pendingProfile.name) || $("nm").value.trim();
+  const ph = (S.pendingProfile && S.pendingProfile.phone) || $("ph").value.trim();
+  if (!oname) return setFlash("Ofis adı gerekli.", false);
+  if (!nm) return setFlash("Ad soyad gerekli.", false);
+  if (!phoneOk(ph)) return setFlash("Geçerli bir telefon numarası girin.", false);
+  const u = S.user;
+  const oid = slug(oname) + "-" + Math.random().toString(36).slice(2, 6);
+  try {
+    // Kullanıcı belgesi önce yazılır: kural, ofis belgesi henüz yokken yöneticiliğe izin verir.
+    await db.collection("users").doc(u.uid).set({
+      office: oid, role: "admin", cid: "c" + u.uid.slice(0, 8),
+      email: (u.email || "").toLowerCase(), name: nm, phone: ph
+    });
+    await db.collection("offices").doc(oid).set({
+      name: oname, createdBy: u.uid, pending: true, disabled: true,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    S.pendingProfile = null;
+    await refresh();
+    setFlash("Ofis açıldı, onay bekleniyor.", true);
+  } catch (e) {
+    setFlash("Ofis açılamadı: " + e.message, false);
+  }
+}
+
+async function refresh() {
+  await loadState();
+  render();
+}
+
+auth.onAuthStateChanged(async u => {
+  S.user = u;
+  S.ready = false; render();
+  try { await loadState(); }
+  catch (e) { setFlash("Veri okunamadı: " + e.message, false); }
+  S.ready = true;
+  render();
+});
 </script>
 </body>
 </html>
