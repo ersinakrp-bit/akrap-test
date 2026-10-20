@@ -9,56 +9,85 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <style>
-:root{--bg:#e8eef6;--card:#ffffff;--ink:#0f172a;--mute:#64748b;--line:#e2e8f0;--teal:#1e40af;--teal-ink:#fff;--soft:#dce6f4;--red:#b91c1c;--brass:#b45309}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0b1220;--card:#111827;--ink:#e5e7eb;--mute:#94a3b8;--line:#1f2937;--teal:#60a5fa;--teal-ink:#0b1220;--soft:#1e293b;--red:#f87171;--brass:#fbbf24}}
-:root[data-theme="dark"]{--bg:#0b1220;--card:#111827;--ink:#e5e7eb;--mute:#94a3b8;--line:#1f2937;--teal:#60a5fa;--teal-ink:#0b1220;--soft:#1e293b;--red:#f87171;--brass:#fbbf24}
+:root{--bg:#eceff4;--card:#fff;--ink:#111827;--mute:#6b7280;--line:#e5e7eb;--navy:#1b2a4a;--acc:#c8783a;--accsoft:#fbeee2;--green:#15803d;--red:#dc2626;--soft:#e8eefc;--blue:#1e3a8a}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 "Bricolage Grotesque",system-ui,-apple-system,"Segoe UI",sans-serif}
-header#top{position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--line);z-index:5;padding-top:env(safe-area-inset-top,0px)}
-header#top:empty{display:none}
-.wrap{max-width:680px;margin:0 auto;padding:0 14px}
-.hdr{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 0 6px}
-.brand{font-weight:800;font-size:16px}
-.who{font-size:13px;color:var(--mute);white-space:nowrap}
-.who a{color:var(--teal);text-decoration:none;font-weight:600}
-nav{display:flex;gap:6px;overflow-x:auto;padding:4px 0 12px}
-nav button{width:auto;margin:0;flex:none;background:var(--card);color:var(--mute);border:1px solid var(--line);padding:6px 12px;font-size:14px}
-nav button.on{background:var(--teal);color:var(--teal-ink);border-color:var(--teal)}
-main{max-width:680px;margin:0 auto;padding:14px 14px 24px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:10px}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 "Bricolage Grotesque",system-ui,-apple-system,"Segoe UI",sans-serif;padding-bottom:110px}
+.top{position:sticky;top:0;z-index:20;background:var(--navy);color:#fff;display:flex;align-items:center;gap:10px;padding:10px 14px;padding-top:calc(10px + env(safe-area-inset-top,0px))}
+.top:empty{display:none}
+.logo{width:40px;height:40px;border-radius:50%;background:#fff;color:var(--navy);font-weight:800;display:grid;place-items:center;flex:none;font-size:14px}
+.ofname{font-weight:700;font-size:15px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+main{max-width:640px;margin:0 auto;padding:12px 14px}
 h1{font-size:20px;font-weight:800;margin:6px 0 10px}
-h2{font-size:16px;font-weight:800;margin:0 0 8px}
+h2{font-size:17px;font-weight:800;margin:14px 2px 8px}
 label{display:block;font-size:13px;color:var(--mute);margin-top:10px}
-input,select,textarea{width:100%;font:inherit;padding:9px 10px;margin-top:4px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
-textarea{min-height:80px;resize:vertical}
-button{width:100%;padding:10px 14px;margin-top:8px;font:inherit;font-weight:600;border:0;border-radius:8px;background:var(--teal);color:var(--teal-ink);cursor:pointer}
-button.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
-button.danger{background:transparent;color:var(--red);border:1px solid var(--line)}
-button.small{width:auto;margin:0;padding:6px 12px;font-size:13px}
+input,select,textarea{width:100%;font:inherit;padding:11px 14px;margin-top:4px;border:1px solid var(--line);border-radius:14px;background:#fff;color:var(--ink)}
+textarea{min-height:90px;resize:vertical}
+button{width:100%;padding:12px 14px;margin-top:8px;font:inherit;font-weight:700;border:0;border-radius:14px;background:var(--navy);color:#fff;cursor:pointer}
+button.acc{background:var(--acc)}
+button.ghost{background:#fff;color:var(--ink);border:1px solid var(--line)}
+button.danger{background:#fff;color:var(--red);border:1px solid var(--line)}
+button.small{width:auto;margin:0;padding:8px 14px;border-radius:999px;font-size:14px}
 button:disabled{opacity:.5}
-button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
-.back{background:none;color:var(--teal);width:auto;padding:2px 0;margin:0 0 6px;font-weight:600}
-.item{display:block;width:100%;text-align:left;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:12px;margin:0 0 8px}
-.item .t{font-weight:700}
-.item .s{font-size:13px;color:var(--mute)}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.upill{background:#fff;color:var(--navy);border-radius:999px;padding:7px 14px;font-size:14px;font-weight:700;width:auto;margin:0;white-space:nowrap}
+.back{background:none;color:var(--acc);width:auto;padding:2px 0;margin:0 0 6px;font-weight:700}
+.hero{background:linear-gradient(135deg,#1b2a4a,#2c3e66);color:#fff;border-radius:22px;padding:18px;margin-bottom:12px}
+.hero .hi{font-size:20px;font-weight:800}
+.hero .hs{font-size:14px;opacity:.8;margin-top:4px}
+.stats{display:grid;grid-template-columns:1fr 1fr;background:#fff;border-radius:22px;overflow:hidden;margin-bottom:12px}
+.stats div{padding:16px 10px;text-align:center;border-bottom:1px solid var(--line)}
+.stats div:nth-child(odd){border-right:1px solid var(--line)}
+.stats div:nth-last-child(-n+2){border-bottom:0}
+.stats b{display:block;color:var(--acc);font-size:24px;line-height:1.2}
+.stats span{font-size:13px;color:var(--mute)}
+.card{background:#fff;border-radius:18px;padding:14px 16px;margin-bottom:12px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
 .row{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.big{font-size:22px;color:var(--acc)}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:4px 0 10px}
+.chips button{width:auto;flex:none;margin:0;background:#fff;color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:8px 14px;font-size:14px;font-weight:600}
+.chips button.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+.bar{display:flex;gap:8px;align-items:center;margin-bottom:10px}
+.bar input{border-radius:999px;margin:0}
+.bar button{width:auto;margin:0;flex:none;border-radius:999px;padding:10px 16px}
+.item{display:block;width:100%;text-align:left;background:#fff;color:var(--ink);border-radius:18px;padding:14px 16px;margin:0 0 10px;box-shadow:0 1px 2px rgba(0,0,0,.05);font:inherit;font-weight:400}
+.item .t{font-weight:700;font-size:16px}
+.item .s{font-size:13px;color:var(--mute);margin-top:2px}
+.gh{display:flex;justify-content:space-between;align-items:baseline;font-weight:800;font-size:18px;margin:16px 2px 8px}
+.gh span{font-size:14px;color:var(--mute);font-weight:500}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.kv{display:grid;grid-template-columns:110px 1fr;gap:6px 10px;font-size:14px;margin-top:8px}
+.kv{display:grid;grid-template-columns:120px 1fr;gap:6px 10px;font-size:14px;margin-top:8px}
 .kv div:nth-child(odd){color:var(--mute)}
-.badge{font-size:12px;background:var(--soft);color:var(--teal);padding:3px 9px;border-radius:99px;white-space:nowrap;font-weight:600}
+.badge{font-size:12px;background:var(--soft);color:var(--blue);padding:3px 10px;border-radius:999px;white-space:nowrap;font-weight:700}
 .st-aktif{background:#dcfce7;color:#166534}
 .st-satildi,.st-kapandi{background:#fee2e2;color:#991b1b}
 .st-kiralandi,.st-beklemede,.st-tapu{background:#fef3c7;color:#92400e}
 .muted{color:var(--mute);font-size:14px}
 .err{color:var(--red);font-size:14px;margin-top:8px;min-height:18px}
-.ok{color:#15803d;font-size:14px;margin-top:8px;min-height:18px}
-.uid{word-break:break-all;background:var(--bg);padding:8px;border-radius:8px;font-size:13px}
-@media (max-width:420px){.grid{grid-template-columns:1fr}.who{display:none}}
+.ok{color:var(--green);font-size:14px;margin-top:8px;min-height:18px}
+.uid{word-break:break-all;background:var(--bg);padding:8px;border-radius:10px;font-size:13px}
+.bnav{position:fixed;left:12px;right:12px;bottom:calc(10px + env(safe-area-inset-bottom,0px));z-index:30;background:#fff;border-radius:999px;box-shadow:0 8px 24px rgba(15,23,42,.18);display:flex;justify-content:space-around;padding:6px}
+.bnav:empty{display:none}
+.bnav button{background:none;color:var(--mute);width:auto;margin:0;padding:4px 2px;font-size:11px;font-weight:600;flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;border-radius:999px}
+.bnav button i{font-style:normal;font-size:18px;line-height:1}
+.bnav button.on{color:var(--acc)}
+.bnav button.on span{background:var(--accsoft);border-radius:999px;padding:2px 10px}
+.fab{position:fixed;right:18px;bottom:92px;width:58px;height:58px;border-radius:50%;background:var(--navy);color:#fff;border:0;font-size:30px;line-height:1;margin:0;padding:0;z-index:30;box-shadow:0 8px 20px rgba(27,42,74,.4)}
+.fab[hidden]{display:none}
+.sheet{position:fixed;inset:0;z-index:50}
+.sheet[hidden]{display:none}
+.sheetbg{position:absolute;inset:0;background:rgba(15,23,42,.45)}
+.sheetbox{position:absolute;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));background:#fff;border-radius:22px;padding:16px;max-height:80vh;overflow:auto}
+.sheetbox button{background:var(--bg);color:var(--ink);text-align:left;font-weight:600}
+.sheetbox button.acc{background:var(--acc);color:#fff}
+@media (max-width:420px){.grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
-<header id="top"></header>
+<header id="top" class="top"></header>
 <main id="app"><p class="muted">Yükleniyor…</p></main>
+<nav id="bnav" class="bnav"></nav>
+<button id="fab" class="fab" aria-label="Hızlı ekle" hidden onclick="openQuick()">+</button>
+<div id="sheet" class="sheet" hidden><div class="sheetbg" onclick="closeSheet()"></div><div class="sheetbox" id="sheetbox"></div></div>
 
 <script>
 const firebaseConfig = {
@@ -203,17 +232,29 @@ function waitingView() {
 
 function homeView() {
   const p = S.profile;
-  return `<div class="card">
-    <div class="row"><h2>${esc(S.office.name)}</h2><span class="badge">${esc(ROLE_LABEL[p.role] || p.role)}</span></div>
-    <p class="muted">Merhaba ${esc(p.name)} · ${esc(p.phone)}</p>
-  </div>
-  <div class="card"><h2>Menü</h2>
-    <button onclick="goListings()">Portföy</button>
-    <button onclick="goCustomers()">Müşteriler</button>
-    <button onclick="goSales()">Satışlar</button>
-    ${isAdmin() ? '<button onclick="goOffice()">Ofis yönetimi</button>' : ""}
-  </div>
-  <button class="ghost" onclick="doLogout()">Çıkış yap</button>`;
+  const first = String(p.name || "").split(" ")[0];
+  const ym = todayStr().slice(0, 7);
+  const activeL = S.listings.filter(l => l.status === "aktif").length;
+  const activeC = S.customers.filter(c => c.status === "aktif").length;
+  const openS = S.sales.filter(x => x.status !== "tamamlandi");
+  const pot = openS.reduce((t, x) => t + myShare(x), 0);
+  const monthS = S.sales.filter(x => String(x.date || "").startsWith(ym)).length;
+  return `<div class="hero">
+      <div class="hi">İyi günler, ${esc(first)}</div>
+      <div class="hs">${esc(S.office.name)} · ${esc(ROLE_LABEL[p.role] || "")}</div>
+    </div>
+    <div class="stats">
+      <div><b>${activeC}</b><span>Aktif müşteri</span></div>
+      <div><b>${activeL}</b><span>Aktif portföy</span></div>
+      <div><b>${S.sales.length}</b><span>Toplam satış</span></div>
+      <div><b>${monthS}</b><span>Bu ay satış</span></div>
+    </div>
+    <div class="card row">
+      <div><div class="muted">Açık süreç komisyonu</div><div class="big">${money(Math.round(pot))}</div></div>
+      <span class="badge">${openS.length} açık süreç</span>
+    </div>
+    <div class="card row"><b>✅ Görevlerim</b><span class="muted">görev yok</span></div>
+    ${msgBlock()}`;
 }
 
 /* ---------- Portföy ---------- */
@@ -227,28 +268,23 @@ function listingsView() {
     }
     return true;
   });
+  const chip = (k, label) => `<button class="${S.filterStatus === k ? "on" : ""}" onclick="setFilter('${k}')">${label}</button>`;
   const items = filtered.length
     ? filtered.map(l => `<button class="item" onclick="openListing('${esc(l.id)}')">
         <div class="row"><span class="t">${esc(l.title)}</span>
           <span class="badge st-${esc(l.status)}">${esc(STATUS[l.status] || l.status)}</span></div>
-        <div class="s">${esc(l.type)} · ${esc(l.district)} · ${money(l.price)}</div>
+        <div class="s">${esc(l.type)} · ${esc(l.district)} · <b>${money(l.price)}</b></div>
         <div class="s">Danışman: ${esc(l.advisorName || "-")}</div>
       </button>`).join("")
     : `<p class="muted">Kayıt bulunamadı.</p>`;
-  return `<button class="back" onclick="goHome()">← Ana sayfa</button>
-  <div class="card">
-    <div class="row"><h2>Portföy (${S.listings.length})</h2>
-      <button class="small" onclick="newListing()">+ Yeni</button></div>
-    <div class="grid">
-      <div><label>Durum<select onchange="setFilter(this.value)">
-        <option value="all" ${S.filterStatus === "all" ? "selected" : ""}>Tümü</option>
-        ${Object.keys(STATUS).map(k => `<option value="${k}" ${S.filterStatus === k ? "selected" : ""}>${STATUS[k]}</option>`).join("")}
-      </select></label></div>
-      <div><label>Ara<input value="${esc(S.q)}" oninput="setQ(this.value)" placeholder="Başlık, ilçe, tür"></label></div>
+  return `<div class="chips">
+      ${chip("all", "Tümü " + S.listings.length)}${chip("aktif", "Aktif " + S.listings.filter(l => l.status === "aktif").length)}
+      ${chip("satildi", "Satıldı " + S.listings.filter(l => l.status === "satildi").length)}${chip("kiralandi", "Kiralandı " + S.listings.filter(l => l.status === "kiralandi").length)}
     </div>
+    <div class="bar"><input value="${esc(S.q)}" oninput="setQ(this.value)" placeholder="Ara: başlık, ilçe, tür">
+      <button class="acc" onclick="newListing()">+ Portföy</button></div>
     ${msgBlock()}
-  </div>
-  <div>${items}</div>`;
+    <div>${items}</div>`;
 }
 
 function listingDetailView() {
@@ -312,32 +348,28 @@ function customersView() {
     }
     return true;
   });
-  const items = filtered.length
-    ? filtered.map(c => `<button class="item" onclick="openCustomer('${esc(c.id)}')">
-        <div class="row"><span class="t">${esc(c.name)}</span>
-          <span class="badge st-${esc(c.status)}">${esc(CSTATUS[c.status] || c.status)}</span></div>
-        <div class="s">${esc(KIND[c.kind] || c.kind)} · ${esc(c.phone)}${c.district ? " · " + esc(c.district) : ""}</div>
-        <div class="s">Danışman: ${esc(c.advisorName || "-")}</div>
-      </button>`).join("")
+  const groups = {};
+  filtered.forEach(c => { (groups[c.kind] = groups[c.kind] || []).push(c); });
+  const body = Object.keys(groups).length
+    ? Object.keys(groups).map(k => `<div class="gh">${esc(KIND[k] || k)} <span>${groups[k].length} kayıt</span></div>` +
+        groups[k].map(c => `<button class="item" onclick="openCustomer('${esc(c.id)}')">
+          <div class="row"><span class="t">${esc(c.name)}</span>
+            <span class="badge st-${esc(c.status)}">${esc(CSTATUS[c.status] || c.status)}</span></div>
+          <div class="s">${esc(c.phone)}${c.district ? " · " + esc(c.district) : ""}</div>
+          <div class="s">Danışman: ${esc(c.advisorName || "-")}</div>
+        </button>`).join("")).join("")
     : `<p class="muted">Kayıt bulunamadı.</p>`;
-  return `<button class="back" onclick="goHome()">← Ana sayfa</button>
-  <div class="card">
-    <div class="row"><h2>Müşteriler (${S.customers.length})</h2>
-      <button class="small" onclick="newCustomer()">+ Yeni</button></div>
-    <div class="grid">
-      <div><label>Tür<select onchange="setCKind(this.value)">
-        <option value="all" ${S.cKind === "all" ? "selected" : ""}>Tümü</option>
-        ${Object.keys(KIND).map(k => `<option value="${k}" ${S.cKind === k ? "selected" : ""}>${KIND[k]}</option>`).join("")}
-      </select></label></div>
-      <div><label>Durum<select onchange="setCStatus(this.value)">
-        <option value="all" ${S.cStatus === "all" ? "selected" : ""}>Tümü</option>
+  return `<div class="bar"><input value="${esc(S.cq)}" oninput="setCQ(this.value)" placeholder="Ara: isim, telefon, ilçe">
+      <select onchange="setCStatus(this.value)" style="width:auto;border-radius:999px;margin:0">
+        <option value="all">Tüm durumlar</option>
         ${Object.keys(CSTATUS).map(k => `<option value="${k}" ${S.cStatus === k ? "selected" : ""}>${CSTATUS[k]}</option>`).join("")}
-      </select></label></div>
-    </div>
-    <label>Ara<input value="${esc(S.cq)}" oninput="setCQ(this.value)" placeholder="Ad, telefon, ilçe"></label>
+      </select></div>
+    <div class="bar"><select onchange="setCKind(this.value)" style="margin:0">
+        <option value="all">Tüm türler</option>
+        ${Object.keys(KIND).map(k => `<option value="${k}" ${S.cKind === k ? "selected" : ""}>${KIND[k]}</option>`).join("")}
+      </select><button class="acc" onclick="newCustomer()">+ Müşteri</button></div>
     ${msgBlock()}
-  </div>
-  <div>${items}</div>`;
+    ${body}`;
 }
 
 function customerDetailView() {
@@ -476,47 +508,28 @@ function setSFilter(v) { S.sFilter = v; render(); }
 function setSQ(v) { S.sq = v; render(); }
 
 function salesView() {
-  const mine = S.sales;
   const ym = todayStr().slice(0, 7);
-  const open = mine.filter(x => x.status !== "tamamlandi").length;
-  const monthCount = mine.filter(x => String(x.date || "").startsWith(ym)).length;
-  const pend = mine.filter(x => x.comStatus !== "tahsil").reduce((t, x) => t + myShare(x), 0);
-  const list = mine.filter(x => {
-    if (S.sFilter !== "all" && x.status !== S.sFilter) return false;
-    if (S.sq) {
-      const hay = [x.title, x.buyer, x.advisorName].join(" ").toLowerCase();
-      if (!hay.includes(S.sq.toLowerCase())) return false;
-    }
-    return true;
-  });
-  const items = list.length
-    ? list.map(x => `<button class="item" onclick="openSale('${esc(x.id)}')">
-        <div class="row"><span class="t">${esc(x.title)}</span>${saleBadge(x.status)}</div>
-        <div class="s">${money(x.price)}${x.buyer ? " · " + esc(x.buyer) : ""} · ${esc(x.date || "")}</div>
-        <div class="s">Danışman: ${esc(x.advisorName || "-")}${x.advisor2 ? " + ortak" : ""}</div>
-      </button>`).join("")
-    : `<p class="muted">Satış kaydı bulunamadı.</p>`;
-  return `<button class="back" onclick="goHome()">← Ana sayfa</button>
-  <div class="card">
-    <div class="grid">
-      <div><b>${mine.length}</b><div class="muted">Toplam satış</div></div>
-      <div><b>${monthCount}</b><div class="muted">Bu ay</div></div>
-      <div><b>${open}</b><div class="muted">Açık süreç</div></div>
-      <div><b>${money(Math.round(pend))}</b><div class="muted">${isAdmin() ? "Bekleyen komisyon" : "Bekleyen payım"}</div></div>
+  const open = S.sales.filter(x => x.status !== "tamamlandi");
+  const done = S.sales.filter(x => x.status === "tamamlandi");
+  const monthCount = S.sales.filter(x => String(x.date || "").startsWith(ym)).length;
+  const pend = S.sales.filter(x => x.comStatus !== "tahsil").reduce((t, x) => t + myShare(x), 0);
+  const card = x => `<button class="item" onclick="openSale('${esc(x.id)}')">
+      <div class="row"><span class="t">${esc(x.title)}</span><span class="big" style="font-size:17px">${money(x.price)}</span></div>
+      <div class="row" style="margin-top:6px">${saleBadge(x.status)}<span class="badge">${esc(x.advisorName || "-")}</span>${x.advisor2 ? '<span class="badge">🤝 ortak</span>' : ""}</div>
+      <div class="s" style="margin-top:6px">${esc(x.buyer || "")}${x.date ? " · satış " + esc(x.date) : ""}</div>
+    </button>`;
+  return `<div class="stats">
+      <div><b>${S.sales.length}</b><span>Toplam satış</span></div>
+      <div><b>${monthCount}</b><span>Bu ay satış</span></div>
+      <div><b>${open.length}</b><span>Açık süreç</span></div>
+      <div><b>${money(Math.round(pend))}</b><span>${isAdmin() ? "Bekleyen komisyon" : "Bekleyen payım"}</span></div>
     </div>
-  </div>
-  <div class="card">
-    <div class="row"><h2>Satışlar</h2><button class="small" onclick="newSale()">+ Yeni satış</button></div>
-    <div class="grid">
-      <div><label>Durum<select onchange="setSFilter(this.value)">
-        <option value="all" ${S.sFilter === "all" ? "selected" : ""}>Tümü</option>
-        ${Object.keys(SALE_STATUS).map(k => `<option value="${k}" ${S.sFilter === k ? "selected" : ""}>${SALE_STATUS[k]}</option>`).join("")}
-      </select></label></div>
-      <div><label>Ara<input value="${esc(S.sq)}" oninput="setSQ(this.value)" placeholder="Portföy, alıcı, danışman"></label></div>
-    </div>
+    <div class="bar"><span class="muted" style="flex:1">${S.sales.length} satış kaydı</span>
+      <button class="acc" onclick="newSale()">+ Yeni satış</button></div>
     ${msgBlock()}
-  </div>
-  <div>${items}</div>`;
+    ${open.length ? `<div class="gh">Açık süreçler <span>${open.length}</span></div>${open.map(card).join("")}` : ""}
+    ${done.length ? `<div class="gh">Tamamlanan satışlar <span>${done.length}</span></div>${done.map(card).join("")}` : ""}
+    ${!S.sales.length ? '<p class="muted">Henüz satış kaydı yok.</p>' : ""}`;
 }
 
 function saleDetailView() {
@@ -699,25 +712,56 @@ async function deleteSale() {
 
 
 /* ---------- Üst menü ---------- */
+function initials(n) { return String(n || "?").trim().split(/\s+/).slice(0, 2).map(w => w[0] || "").join("").toUpperCase(); }
 function navHtml() {
+  const ready = S.ready && S.user && S.profile && S.office && phoneOk(S.profile.phone) && S.profile.name
+    && !S.office.pending && !S.office.disabled;
+  if (!ready) return "";
+  return `<div class="logo">${esc(initials(S.office.name))}</div>
+    <div class="ofname">${esc(S.office.name)}</div>
+    <button class="upill" onclick="openMenu()">${esc(S.profile.name)} ▾</button>`;
+}
+function navbarHtml() {
   const ready = S.ready && S.user && S.profile && S.office && phoneOk(S.profile.phone) && S.profile.name
     && !S.office.pending && !S.office.disabled;
   if (!ready) return "";
   const sec = { home:"home", listings:"listings", detail:"listings", form:"listings",
     customers:"customers", cdetail:"customers", cform:"customers",
-    sales:"sales", sdetail:"sales", sform:"sales", office:"office" }[S.view] || "home";
-  const btn = (k, label, fn) => `<button class="${sec === k ? "on" : ""}" onclick="${fn}">${label}</button>`;
-  return `<div class="wrap">
-    <div class="hdr"><div class="brand">${esc(S.office.name)}</div>
-      <div class="who">${esc(S.profile.name)} · <a href="#" onclick="doLogout();return false">Çıkış</a></div></div>
-    <nav>${btn("home","Ana sayfa","goHome()")}${btn("listings","Portföy","goListings()")}${btn("customers","Müşteriler","goCustomers()")}${btn("sales","Satışlar","goSales()")}${isAdmin() ? btn("office","Ofis","goOffice()") : ""}</nav>
-  </div>`;
+    sales:"sales", sdetail:"sales", sform:"sales", ciddi:"ciddi", office:"home" }[S.view] || "home";
+  const b = (k, ic, label, fn) => `<button class="${sec === k ? "on" : ""}" onclick="${fn}"><i>${ic}</i><span>${label}</span></button>`;
+  return b("home","⌂","Bugün","goHome()") + b("customers","👥","Müşteri","goCustomers()")
+    + b("listings","🏢","Portföy","goListings()") + b("ciddi","◎","Ciddi","goCiddi()") + b("sales","💰","Satış","goSales()");
+}
+function openSheet(html) {
+  $("sheetbox").innerHTML = html;
+  $("sheet").hidden = false;
+}
+function closeSheet() { $("sheet").hidden = true; }
+function openQuick() {
+  openSheet(`<h2 style="margin-top:0">Hızlı ekle</h2>
+    <button class="acc" onclick="closeSheet();newListing()">+ Yeni portföy</button>
+    <button onclick="closeSheet();newCustomer()">+ Yeni müşteri</button>
+    <button onclick="closeSheet();newSale()">+ Yeni satış</button>
+    <button class="ghost" onclick="closeSheet()">Kapat</button>`);
+}
+function openMenu() {
+  openSheet(`<h2 style="margin-top:0">${esc(S.profile.name)}</h2>
+    <p class="muted">${esc(S.office.name)} · ${esc(ROLE_LABEL[S.profile.role] || "")}</p>
+    <button onclick="closeSheet();goHome()">Ana sayfa</button>
+    <button onclick="closeSheet();goListings()">Portföy</button>
+    <button onclick="closeSheet();goCustomers()">Müşteriler</button>
+    <button onclick="closeSheet();goSales()">Satışlar</button>
+    <button onclick="closeSheet();goCiddi()">Ciddi müşteriler</button>
+    ${isAdmin() ? '<button onclick="closeSheet();goOffice()">Ofis yönetimi</button>' : ""}
+    <button class="danger" onclick="closeSheet();doLogout()">Çıkış yap</button>`);
 }
 
 /* ---------- Render ---------- */
 
 function render() {
   $("top").innerHTML = navHtml();
+  $("bnav").innerHTML = navbarHtml();
+  $("fab").hidden = !navbarHtml();
   const app = $("app");
   if (!S.ready) { app.innerHTML = '<p class="muted">Yükleniyor…</p>'; return; }
   if (!S.user) { app.innerHTML = loginView(); return; }
@@ -732,7 +776,7 @@ function render() {
     listings: listingsView, detail: listingDetailView, form: listingFormView,
     customers: customersView, cdetail: customerDetailView, cform: customerFormView,
     office: officeView,
-    sales: salesView, sdetail: saleDetailView, sform: saleFormView
+    sales: salesView, sdetail: saleDetailView, sform: saleFormView, ciddi: ciddiView
   };
   app.innerHTML = (views[S.view] || homeView)();
 }
@@ -836,7 +880,12 @@ async function removeMember(uid) {
 
 /* ---------- Eylemler: portföy ---------- */
 
-async function goHome() { S.view = "home"; S.msg = ""; render(); }
+async function goHome() {
+  S.view = "home"; S.msg = "";
+  try { await Promise.all([loadListings(), loadCustomers(), loadSales()]); }
+  catch (e) { setMsg("Veriler okunamadı: " + e.message, false); return; }
+  render();
+}
 
 async function goListings() {
   S.view = "listings"; S.msg = "";
