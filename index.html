@@ -67,7 +67,8 @@ const S = {
   view: "home", msg: "", msgOk: false,
   listings: [], current: null, editing: false, filterStatus: "all", q: "",
   customers: [], currentCust: null, editingCust: false, cKind: "all", cStatus: "all", cq: "",
-  members: []
+  members: [],
+  sales: [], currentSale: null, editingSale: false, sFilter: "all", sq: ""
 };
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -195,6 +196,7 @@ function homeView() {
   <div class="card"><h2>Menü</h2>
     <button onclick="goListings()">Portföy</button>
     <button onclick="goCustomers()">Müşteriler</button>
+    <button onclick="goSales()">Satışlar</button>
     ${isAdmin() ? '<button onclick="goOffice()">Ofis yönetimi</button>' : ""}
   </div>
   <button class="ghost" onclick="doLogout()">Çıkış yap</button>`;
@@ -410,6 +412,277 @@ function officeView() {
   ${msgBlock()}`;
 }
 
+
+/* ---------- Satışlar ---------- */
+
+const SALE_STATUS = { anlasildi: "Anlaşıldı", tapu: "Tapu aşamasında", tamamlandi: "Tamamlandı" };
+const COM_STATUS = { bekliyor: "Bekliyor", tahsil: "Tahsil edildi" };
+const PAY_TYPES = ["Nakit", "Banka kredisi", "Takas", "Diğer"];
+const todayStr = () => new Date().toISOString().slice(0, 10);
+
+function comOf(x) { return Math.round((Number(x.price) || 0) * (Number(x.rate) || 0) / 100); }
+function myShare(x) {
+  const c = comOf(x);
+  if (isAdmin()) return c;
+  if (x.advisor2) return x.advisor === S.user.uid || x.advisor2 === S.user.uid ? Math.round(c / 2) : 0;
+  return x.advisor === S.user.uid ? c : 0;
+}
+function canEditSale(x) { return !!x && (x.advisor === S.user.uid || isAdmin()); }
+function saleBadge(st) {
+  const cls = st === "tamamlandi" ? "st-aktif" : st === "tapu" ? "st-beklemede" : "";
+  return `<span class="badge ${cls}">${esc(SALE_STATUS[st] || st)}</span>`;
+}
+
+async function loadSales() {
+  const base = officeRef().collection("sales");
+  let docs;
+  if (isAdmin()) {
+    docs = (await base.get()).docs;
+  } else {
+    const a = await base.where("advisor", "==", S.user.uid).get();
+    const b = await base.where("advisor2", "==", S.user.uid).get();
+    const map = new Map();
+    [...a.docs, ...b.docs].forEach(d => map.set(d.id, d));
+    docs = [...map.values()];
+  }
+  S.sales = docs.map(d => Object.assign({ id: d.id }, d.data()))
+    .sort((x, y) => String(y.date || "").localeCompare(String(x.date || "")));
+}
+
+async function goSales() {
+  S.view = "sales"; S.msg = "";
+  try {
+    await Promise.all([loadSales(), loadListings(), loadCustomers()]);
+    if (isAdmin()) await loadMembers();
+  } catch (e) { setMsg("Satışlar okunamadı: " + e.message, false); return; }
+  render();
+}
+
+function setSFilter(v) { S.sFilter = v; render(); }
+function setSQ(v) { S.sq = v; render(); }
+
+function salesView() {
+  const mine = S.sales;
+  const ym = todayStr().slice(0, 7);
+  const open = mine.filter(x => x.status !== "tamamlandi").length;
+  const monthCount = mine.filter(x => String(x.date || "").startsWith(ym)).length;
+  const pend = mine.filter(x => x.comStatus !== "tahsil").reduce((t, x) => t + myShare(x), 0);
+  const list = mine.filter(x => {
+    if (S.sFilter !== "all" && x.status !== S.sFilter) return false;
+    if (S.sq) {
+      const hay = [x.title, x.buyer, x.advisorName].join(" ").toLowerCase();
+      if (!hay.includes(S.sq.toLowerCase())) return false;
+    }
+    return true;
+  });
+  const items = list.length
+    ? list.map(x => `<button class="item" onclick="openSale('${esc(x.id)}')">
+        <div class="row"><span class="t">${esc(x.title)}</span>${saleBadge(x.status)}</div>
+        <div class="s">${money(x.price)}${x.buyer ? " · " + esc(x.buyer) : ""} · ${esc(x.date || "")}</div>
+        <div class="s">Danışman: ${esc(x.advisorName || "-")}${x.advisor2 ? " + ortak" : ""}</div>
+      </button>`).join("")
+    : `<p class="muted">Satış kaydı bulunamadı.</p>`;
+  return `<button class="back" onclick="goHome()">← Ana sayfa</button>
+  <div class="card">
+    <div class="grid">
+      <div><b>${mine.length}</b><div class="muted">Toplam satış</div></div>
+      <div><b>${monthCount}</b><div class="muted">Bu ay</div></div>
+      <div><b>${open}</b><div class="muted">Açık süreç</div></div>
+      <div><b>${money(Math.round(pend))}</b><div class="muted">${isAdmin() ? "Bekleyen komisyon" : "Bekleyen payım"}</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="row"><h2>Satışlar</h2><button class="small" onclick="newSale()">+ Yeni satış</button></div>
+    <div class="grid">
+      <div><label>Durum<select onchange="setSFilter(this.value)">
+        <option value="all" ${S.sFilter === "all" ? "selected" : ""}>Tümü</option>
+        ${Object.keys(SALE_STATUS).map(k => `<option value="${k}" ${S.sFilter === k ? "selected" : ""}>${SALE_STATUS[k]}</option>`).join("")}
+      </select></label></div>
+      <div><label>Ara<input value="${esc(S.sq)}" oninput="setSQ(this.value)" placeholder="Portföy, alıcı, danışman"></label></div>
+    </div>
+    ${msgBlock()}
+  </div>
+  <div>${items}</div>`;
+}
+
+function saleDetailView() {
+  const x = S.currentSale;
+  const c = comOf(x);
+  const share = x.advisor2 ? Math.round(c / 2) : c;
+  return `<button class="back" onclick="goSales()">← Satış listesi</button>
+  <div class="card">
+    <div class="row"><h2>${esc(x.title)}</h2>${saleBadge(x.status)}</div>
+    <div class="kv">
+      <div>Satış fiyatı</div><div>${money(x.price)}</div>
+      <div>Alıcı</div><div>${esc(x.buyer || "-")}</div>
+      <div>Satış tarihi</div><div>${esc(x.date || "-")}</div>
+      <div>Tapu tarihi</div><div>${esc(x.tapu || "-")}</div>
+      <div>Ödeme</div><div>${esc(x.pay || "-")}</div>
+      <div>Komisyon oranı</div><div>%${esc(x.rate ?? 0)}</div>
+      <div>Komisyon</div><div>${money(c)}${x.advisor2 ? " (her danışmana " + money(share) + ")" : ""}</div>
+      <div>Komisyon durumu</div><div>${esc(COM_STATUS[x.comStatus] || x.comStatus || "-")}</div>
+      <div>Danışman</div><div>${esc(x.advisorName || "-")}</div>
+      <div>Ortak danışman</div><div>${x.advisor2 ? esc(memberName(x.advisor2)) : "-"}</div>
+    </div>
+    ${x.notes ? `<p style="white-space:pre-wrap">${esc(x.notes)}</p>` : ""}
+    ${canEditSale(x)
+      ? `<div class="grid"><button onclick="editSale()">Düzenle</button>
+          <button class="danger" onclick="deleteSale()">Sil</button></div>`
+      : `<p class="muted">Bu satış size ait değil; yalnızca görüntüleyebilirsiniz.</p>`}
+    ${msgBlock()}
+  </div>`;
+}
+
+function saleFormView() {
+  const x = S.editingSale ? S.currentSale : {};
+  const opt = (arr, val) => arr.map(v => `<option value="${esc(v)}" ${val === v ? "selected" : ""}>${esc(v)}</option>`).join("");
+  const listingOpts = S.listings.map(l => `<option value="${esc(l.id)}" ${x.lid === l.id ? "selected" : ""}>${esc(l.title)} · ${money(l.price)}</option>`).join("");
+  const custOpts = S.customers.map(c => `<option value="${esc(c.id)}" ${x.cid === c.id ? "selected" : ""}>${esc(c.name)}</option>`).join("");
+  const partnerField = isAdmin()
+    ? `<label>Ortak danışman<select id="s_adv2">
+        <option value="">Yok</option>
+        ${S.members.filter(m => m.uid !== (x.advisor || S.user.uid)).map(m => `<option value="${esc(m.uid)}" ${x.advisor2 === m.uid ? "selected" : ""}>${esc(m.name || m.uid)}</option>`).join("")}
+      </select></label>`
+    : "";
+  return `<button class="back" onclick="${S.editingSale ? "backToSaleDetail()" : "goSales()"}">← Geri</button>
+  <div class="card">
+    <h2>${S.editingSale ? "Satışı düzenle" : "Yeni satış"}</h2>
+    <p class="muted"><b>*</b> ile işaretli alanlar zorunludur.</p>
+    <label>İlan (isteğe bağlı)<select id="s_lid" onchange="pickSaleListing(this.value)">
+      <option value="">İlan listede yok</option>${listingOpts}</select></label>
+    <label>Portföy adı *<input id="s_title" value="${esc(x.title || "")}"></label>
+    <label>Alıcı (müşteri listesinden)<select id="s_cid">
+      <option value="">Listede yok</option>${custOpts}</select></label>
+    <label>Alıcı adı (listede yoksa)<input id="s_buyer" value="${esc(x.buyer || "")}"></label>
+    <div class="grid">
+      <label>Satış fiyatı (₺) *<input id="s_price" inputmode="numeric" value="${esc(x.price ?? "")}"></label>
+      <label>Komisyon oranı (%)<input id="s_rate" inputmode="decimal" value="${esc(x.rate ?? 2)}"></label>
+    </div>
+    <div class="grid">
+      <label>Satış tarihi *<input id="s_date" type="date" value="${esc(x.date || todayStr())}"></label>
+      <label>Tapu tarihi<input id="s_tapu" type="date" value="${esc(x.tapu || "")}"></label>
+    </div>
+    <div class="grid">
+      <label>Ödeme<select id="s_pay">${opt(PAY_TYPES, x.pay || "Nakit")}</select></label>
+      <label>Durum<select id="s_status">
+        ${Object.keys(SALE_STATUS).map(k => `<option value="${k}" ${(x.status || "anlasildi") === k ? "selected" : ""}>${SALE_STATUS[k]}</option>`).join("")}
+      </select></label>
+    </div>
+    <div class="grid">
+      <label>Komisyon durumu<select id="s_com">
+        ${Object.keys(COM_STATUS).map(k => `<option value="${k}" ${(x.comStatus || "bekliyor") === k ? "selected" : ""}>${COM_STATUS[k]}</option>`).join("")}
+      </select></label>
+      ${partnerField}
+    </div>
+    <label>Notlar<textarea id="s_notes">${esc(x.notes || "")}</textarea></label>
+    <button onclick="saveSale()">Kaydet</button>
+    ${msgBlock()}
+  </div>`;
+}
+
+function pickSaleListing(lid) {
+  const l = S.listings.find(x => x.id === lid);
+  if (!l) return;
+  $("s_title").value = l.title || "";
+  $("s_price").value = l.price ?? "";
+}
+
+function newSale() {
+  S.editingSale = false; S.currentSale = null; S.view = "sform"; S.msg = "";
+  render();
+}
+
+function openSale(id) {
+  S.currentSale = S.sales.find(x => x.id === id) || null;
+  if (!S.currentSale) return setMsg("Kayıt bulunamadı.", false);
+  S.view = "sdetail"; S.msg = "";
+  render();
+}
+function backToSaleDetail() { S.view = "sdetail"; render(); }
+
+function editSale() {
+  if (!canEditSale(S.currentSale)) return setMsg("Bu satışı düzenleme yetkiniz yok.", false);
+  S.editingSale = true; S.view = "sform"; S.msg = "";
+  render();
+}
+
+function readSaleForm() {
+  const v = id => ($(id) ? $(id).value.trim() : "");
+  const cid = v("s_cid");
+  const cust = S.customers.find(c => c.id === cid);
+  const buyer = cust ? cust.name : v("s_buyer");
+  return {
+    lid: v("s_lid"),
+    title: v("s_title"),
+    cid: cust ? cust.id : "",
+    buyer,
+    price: parseMoney(v("s_price")),
+    rate: Number(String(v("s_rate") || "0").replace(",", ".")) || 0,
+    date: v("s_date"),
+    tapu: v("s_tapu"),
+    pay: v("s_pay"),
+    status: v("s_status"),
+    comStatus: v("s_com"),
+    advisor2: $("s_adv2") ? $("s_adv2").value : "",
+    notes: v("s_notes")
+  };
+}
+
+async function closeListing(lid) {
+  if (!lid) return "";
+  try {
+    await officeRef().collection("listings").doc(lid).update({ status: "satildi", closedAt: TS() });
+    return "";
+  } catch (e) {
+    return " (İlan durumu güncellenemedi: sadece ilan sahibi veya yönetici güncelleyebilir.)";
+  }
+}
+
+async function saveSale() {
+  const d = readSaleForm();
+  if (!d.title) return setMsg("Portföy adı zorunlu.", false);
+  if (!(d.price > 0)) return setMsg("Geçerli bir satış fiyatı girin.", false);
+  if (!d.date) return setMsg("Satış tarihi zorunlu.", false);
+  if (!(d.rate >= 0 && d.rate <= 100)) return setMsg("Komisyon oranı 0-100 arasında olmalı.", false);
+  const owner = S.editingSale ? S.currentSale.advisor : S.user.uid;
+  if (d.advisor2 && d.advisor2 === owner) return setMsg("Ortak danışman, satışı yapan danışmandan farklı olmalı.", false);
+  if (S.editingSale && !canEditSale(S.currentSale)) return setMsg("Bu satışı düzenleme yetkiniz yok.", false);
+
+  const ref = officeRef().collection("sales");
+  try {
+    let id;
+    if (S.editingSale) {
+      id = S.currentSale.id;
+      await ref.doc(id).update(Object.assign({}, d, { advisor2: d.advisor2 || "", updatedAt: TS() }));
+    } else {
+      const created = await ref.add(Object.assign({}, d, {
+        advisor: S.user.uid, advisorName: S.profile.name, advisor2: d.advisor2 || "",
+        createdAt: TS(), updatedAt: TS()
+      }));
+      id = created.id;
+    }
+    const warn = d.status === "tamamlandi" || d.status === "tapu" || d.status === "anlasildi" ? await closeListing(d.lid) : "";
+    await loadSales();
+    S.currentSale = S.sales.find(x => x.id === id) || null;
+    S.view = "sdetail"; S.msg = "Satış kaydedildi." + warn; S.msgOk = !warn;
+    render();
+  } catch (e) {
+    setMsg("Kaydedilemedi: " + e.message, false);
+  }
+}
+
+async function deleteSale() {
+  if (!canEditSale(S.currentSale)) return setMsg("Bu satışı silme yetkiniz yok.", false);
+  if (!confirm("Bu satış kaydı silinsin mi?")) return;
+  try {
+    await officeRef().collection("sales").doc(S.currentSale.id).delete();
+    await loadSales();
+    S.currentSale = null; S.view = "sales";
+    S.msg = "Satış silindi."; S.msgOk = true;
+    render();
+  } catch (e) { setMsg("Silinemedi: " + e.message, false); }
+}
+
 /* ---------- Render ---------- */
 
 function render() {
@@ -426,7 +699,8 @@ function render() {
   const views = {
     listings: listingsView, detail: listingDetailView, form: listingFormView,
     customers: customersView, cdetail: customerDetailView, cform: customerFormView,
-    office: officeView
+    office: officeView,
+    sales: salesView, sdetail: saleDetailView, sform: saleFormView
   };
   app.innerHTML = (views[S.view] || homeView)();
 }
