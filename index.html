@@ -28,8 +28,8 @@ button:disabled{opacity:.5}
 .uid{word-break:break-all;background:#f1f5f9;padding:8px;border-radius:8px;font-size:13px}
 .row{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .badge{font-size:12px;background:#dbeafe;color:#1e40af;padding:3px 9px;border-radius:99px;white-space:nowrap}
-.badge.st-satildi{background:#fee2e2;color:#991b1b}
-.badge.st-kiralandi{background:#fef3c7;color:#92400e}
+.badge.st-satildi,.badge.st-kapandi{background:#fee2e2;color:#991b1b}
+.badge.st-kiralandi,.badge.st-beklemede{background:#fef3c7;color:#92400e}
 .badge.st-aktif{background:#dcfce7;color:#166534}
 .item{display:block;width:100%;text-align:left;background:#fff;color:#0f172a;border:1px solid #e2e8f0;margin:0 0 8px;padding:12px}
 .item .t{font-weight:600}
@@ -38,6 +38,9 @@ button:disabled{opacity:.5}
 .kv{display:grid;grid-template-columns:110px 1fr;gap:6px 10px;font-size:15px;margin-top:8px}
 .kv div:nth-child(odd){color:#64748b}
 .back{background:none;color:#1e40af;width:auto;padding:4px 0;margin:0 0 8px}
+.tabs{display:flex;gap:6px;margin-bottom:8px}
+.tabs button{margin:0;padding:8px 10px;font-size:14px;background:#e2e8f0;color:#0f172a}
+.tabs button.on{background:#1e40af;color:#fff}
 </style>
 </head>
 <body>
@@ -56,12 +59,15 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
+const TS = () => firebase.firestore.FieldValue.serverTimestamp();
 
 const S = {
   ready: false, user: null, profile: null, office: null,
   flash: "", flashOk: false,
-  view: "home", listings: [], current: null, editing: false,
-  filterStatus: "all", q: "", msg: "", msgOk: false
+  view: "home", msg: "", msgOk: false,
+  listings: [], current: null, editing: false, filterStatus: "all", q: "",
+  customers: [], currentCust: null, editingCust: false, cKind: "all", cStatus: "all", cq: "",
+  members: []
 };
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -75,13 +81,17 @@ const AUTH_MSG = {
 };
 const LISTING_TYPES = ["Daire", "Villa", "Arsa", "Dükkan", "Ofis", "Diğer"];
 const STATUS = { aktif: "Aktif", satildi: "Satıldı", kiralandi: "Kiralandı" };
+const KIND = { alici: "Alıcı", satici: "Satıcı", kiraci: "Kiracı", ev_sahibi: "Ev sahibi" };
+const CSTATUS = { aktif: "Aktif", beklemede: "Beklemede", kapandi: "Kapandı" };
 const money = n => (n == null || n === "") ? "-" : Number(n).toLocaleString("tr-TR") + " ₺";
+const tsNum = t => (t && t.toMillis) ? t.toMillis() : Date.now();
+const parseMoney = s => { const r = String(s ?? "").trim().replace(/\./g, "").replace(/,/g, "."); return r === "" ? null : Number(r); };
 const slug = s => String(s).toLowerCase()
   .replace(/ğ/g,"g").replace(/ü/g,"u").replace(/ş/g,"s").replace(/ı/g,"i").replace(/ö/g,"o").replace(/ç/g,"c")
   .replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,20) || "ofis";
 
-function isAdmin() { return S.profile && S.profile.role === "admin"; }
-function canEdit(l) { return !!l && (l.advisor === S.user.uid || isAdmin()); }
+function isAdmin() { return !!S.profile && S.profile.role === "admin"; }
+function canEdit(r) { return !!r && (r.advisor === S.user.uid || isAdmin()); }
 
 async function loadState() {
   S.profile = null; S.office = null;
@@ -96,16 +106,39 @@ async function loadState() {
   }
 }
 
+function officeRef() { return db.collection("offices").doc(S.office.id); }
+
 async function loadListings() {
-  const sn = await db.collection("offices").doc(S.office.id).collection("listings")
-    .orderBy("createdAt", "desc").get();
+  const sn = await officeRef().collection("listings").orderBy("createdAt", "desc").get();
   S.listings = sn.docs.map(d => Object.assign({ id: d.id }, d.data()));
+}
+
+async function loadCustomers() {
+  const base = officeRef().collection("customers");
+  const q = isAdmin() ? base : base.where("advisor", "==", S.user.uid);
+  const sn = await q.get();
+  S.customers = sn.docs.map(d => Object.assign({ id: d.id }, d.data()))
+    .sort((a, b) => tsNum(b.createdAt) - tsNum(a.createdAt));
+}
+
+async function loadMembers() {
+  const sn = await db.collection("users").where("office", "==", S.office.id).get();
+  S.members = sn.docs.map(d => Object.assign({ uid: d.id }, d.data()))
+    .sort((a, b) => (a.name || "").localeCompare(b.name || "", "tr"));
+}
+
+function memberName(uid) {
+  const m = S.members.find(x => x.uid === uid);
+  return m ? (m.name || m.uid) : "-";
 }
 
 function setFlash(msg, ok) { S.flash = msg; S.flashOk = !!ok; render(); }
 function setMsg(msg, ok) { S.msg = msg; S.msgOk = !!ok; render(); }
+function msgBlock() {
+  return `<div class="ok">${S.msgOk ? esc(S.msg) : ""}</div><div class="err">${S.msgOk ? "" : esc(S.msg)}</div>`;
+}
 
-/* ---------- Giriş ve ofis (önceki akış) ---------- */
+/* ---------- Giriş ve ofis ---------- */
 
 function loginView() {
   return `<div class="card">
@@ -161,8 +194,8 @@ function homeView() {
   </div>
   <div class="card"><h2>Menü</h2>
     <button onclick="goListings()">Portföy</button>
-    <button disabled>Müşteriler (sonraki adım)</button>
-    ${isAdmin() ? '<button disabled>Ofis yönetimi (sonraki adım)</button>' : ""}
+    <button onclick="goCustomers()">Müşteriler</button>
+    ${isAdmin() ? '<button onclick="goOffice()">Ofis yönetimi</button>' : ""}
   </div>
   <button class="ghost" onclick="doLogout()">Çıkış yap</button>`;
 }
@@ -186,7 +219,6 @@ function listingsView() {
         <div class="s">Danışman: ${esc(l.advisorName || "-")}</div>
       </button>`).join("")
     : `<p class="muted">Kayıt bulunamadı.</p>`;
-
   return `<button class="back" onclick="goHome()">← Ana sayfa</button>
   <div class="card">
     <div class="row"><h2>Portföy (${S.listings.length})</h2>
@@ -198,15 +230,13 @@ function listingsView() {
       </select></label></div>
       <div><label>Ara<input value="${esc(S.q)}" oninput="setQ(this.value)" placeholder="Başlık, ilçe, tür"></label></div>
     </div>
-    <div class="ok">${S.msgOk ? esc(S.msg) : ""}</div>
-    <div class="err">${S.msgOk ? "" : esc(S.msg)}</div>
+    ${msgBlock()}
   </div>
   <div>${items}</div>`;
 }
 
-function detailView() {
+function listingDetailView() {
   const l = S.current;
-  const edit = canEdit(l);
   return `<button class="back" onclick="goListings()">← Portföy listesi</button>
   <div class="card">
     <div class="row"><h2>${esc(l.title)}</h2>
@@ -220,19 +250,18 @@ function detailView() {
       <div>Danışman</div><div>${esc(l.advisorName || "-")}</div>
     </div>
     ${l.description ? `<p style="white-space:pre-wrap">${esc(l.description)}</p>` : ""}
-    ${edit
+    ${canEdit(l)
       ? `<div class="grid"><button onclick="editListing()">Düzenle</button>
           <button class="danger" onclick="deleteListing()">Sil</button></div>`
       : `<p class="muted">Bu portföy size ait değil; yalnızca görüntüleyebilirsiniz.</p>`}
-    <div class="ok">${S.msgOk ? esc(S.msg) : ""}</div>
-    <div class="err">${S.msgOk ? "" : esc(S.msg)}</div>
+    ${msgBlock()}
   </div>`;
 }
 
-function formView() {
+function listingFormView() {
   const l = S.editing ? S.current : {};
   const opt = (arr, val) => arr.map(v => `<option value="${esc(v)}" ${val === v ? "selected" : ""}>${esc(v)}</option>`).join("");
-  return `<button class="back" onclick="${S.editing ? "openListing('" + esc(l.id) + "')" : "goListings()"}">← Geri</button>
+  return `<button class="back" onclick="${S.editing ? "backToListingDetail()" : "goListings()"}">← Geri</button>
   <div class="card">
     <h2>${S.editing ? "Portföyü düzenle" : "Yeni portföy"}</h2>
     <p class="muted"><b>*</b> ile işaretli alanlar zorunludur.</p>
@@ -251,9 +280,137 @@ function formView() {
     </div>
     <label>Açıklama<textarea id="f_desc">${esc(l.description || "")}</textarea></label>
     <button onclick="saveListing()">Kaydet</button>
-    <div class="err">${S.msgOk ? "" : esc(S.msg)}</div>
+    ${msgBlock()}
   </div>`;
 }
+
+/* ---------- Müşteriler ---------- */
+
+function customersView() {
+  const filtered = S.customers.filter(c => {
+    if (S.cKind !== "all" && c.kind !== S.cKind) return false;
+    if (S.cStatus !== "all" && c.status !== S.cStatus) return false;
+    if (S.cq) {
+      const hay = [c.name, c.phone, c.district, c.advisorName].join(" ").toLowerCase();
+      if (!hay.includes(S.cq.toLowerCase())) return false;
+    }
+    return true;
+  });
+  const items = filtered.length
+    ? filtered.map(c => `<button class="item" onclick="openCustomer('${esc(c.id)}')">
+        <div class="row"><span class="t">${esc(c.name)}</span>
+          <span class="badge st-${esc(c.status)}">${esc(CSTATUS[c.status] || c.status)}</span></div>
+        <div class="s">${esc(KIND[c.kind] || c.kind)} · ${esc(c.phone)}${c.district ? " · " + esc(c.district) : ""}</div>
+        <div class="s">Danışman: ${esc(c.advisorName || "-")}</div>
+      </button>`).join("")
+    : `<p class="muted">Kayıt bulunamadı.</p>`;
+  return `<button class="back" onclick="goHome()">← Ana sayfa</button>
+  <div class="card">
+    <div class="row"><h2>Müşteriler (${S.customers.length})</h2>
+      <button class="small" onclick="newCustomer()">+ Yeni</button></div>
+    <div class="grid">
+      <div><label>Tür<select onchange="setCKind(this.value)">
+        <option value="all" ${S.cKind === "all" ? "selected" : ""}>Tümü</option>
+        ${Object.keys(KIND).map(k => `<option value="${k}" ${S.cKind === k ? "selected" : ""}>${KIND[k]}</option>`).join("")}
+      </select></label></div>
+      <div><label>Durum<select onchange="setCStatus(this.value)">
+        <option value="all" ${S.cStatus === "all" ? "selected" : ""}>Tümü</option>
+        ${Object.keys(CSTATUS).map(k => `<option value="${k}" ${S.cStatus === k ? "selected" : ""}>${CSTATUS[k]}</option>`).join("")}
+      </select></label></div>
+    </div>
+    <label>Ara<input value="${esc(S.cq)}" oninput="setCQ(this.value)" placeholder="Ad, telefon, ilçe"></label>
+    ${msgBlock()}
+  </div>
+  <div>${items}</div>`;
+}
+
+function customerDetailView() {
+  const c = S.currentCust;
+  return `<button class="back" onclick="goCustomers()">← Müşteri listesi</button>
+  <div class="card">
+    <div class="row"><h2>${esc(c.name)}</h2>
+      <span class="badge st-${esc(c.status)}">${esc(CSTATUS[c.status] || c.status)}</span></div>
+    <div class="kv">
+      <div>Telefon</div><div><a href="tel:${esc(c.phone)}">${esc(c.phone)}</a></div>
+      <div>Tür</div><div>${esc(KIND[c.kind] || c.kind)}</div>
+      <div>İlçe</div><div>${esc(c.district || "-")}</div>
+      <div>Bütçe</div><div>${c.budgetMin || c.budgetMax ? money(c.budgetMin) + " – " + money(c.budgetMax) : "-"}</div>
+      <div>Oda</div><div>${esc(c.rooms || "-")}</div>
+      <div>Danışman</div><div>${esc(c.advisorName || "-")}</div>
+    </div>
+    ${c.notes ? `<p style="white-space:pre-wrap">${esc(c.notes)}</p>` : ""}
+    ${canEdit(c)
+      ? `<div class="grid"><button onclick="editCustomer()">Düzenle</button>
+          <button class="danger" onclick="deleteCustomer()">Sil</button></div>`
+      : `<p class="muted">Bu müşteri size ait değil; görüntüleme yetkiniz yok.</p>`}
+    ${msgBlock()}
+  </div>`;
+}
+
+function customerFormView() {
+  const c = S.editingCust ? S.currentCust : {};
+  const opt = (obj, val) => Object.keys(obj).map(k => `<option value="${k}" ${val === k ? "selected" : ""}>${esc(obj[k])}</option>`).join("");
+  const advisorField = isAdmin()
+    ? `<label>Danışman *<select id="f_advisor">
+        ${S.members.map(m => `<option value="${esc(m.uid)}" ${(c.advisor || S.user.uid) === m.uid ? "selected" : ""}>${esc(m.name || m.uid)}</option>`).join("")}
+       </select></label>`
+    : "";
+  return `<button class="back" onclick="${S.editingCust ? "backToCustomerDetail()" : "goCustomers()"}">← Geri</button>
+  <div class="card">
+    <h2>${S.editingCust ? "Müşteriyi düzenle" : "Yeni müşteri"}</h2>
+    <p class="muted"><b>*</b> ile işaretli alanlar zorunludur.</p>
+    <label>Ad soyad *<input id="c_name" value="${esc(c.name || "")}"></label>
+    <label>Telefon *<input id="c_phone" type="tel" placeholder="05xx xxx xx xx" value="${esc(c.phone || "")}"></label>
+    <div class="grid">
+      <label>Tür *<select id="c_kind">${opt(KIND, c.kind || "alici")}</select></label>
+      <label>Durum *<select id="c_status">${opt(CSTATUS, c.status || "aktif")}</select></label>
+    </div>
+    <label>İlçe / mahalle<input id="c_district" value="${esc(c.district || "")}"></label>
+    <div class="grid">
+      <label>Bütçe min (₺)<input id="c_bmin" inputmode="numeric" value="${esc(c.budgetMin ?? "")}"></label>
+      <label>Bütçe max (₺)<input id="c_bmax" inputmode="numeric" value="${esc(c.budgetMax ?? "")}"></label>
+    </div>
+    <label>Oda tercihi<input id="c_rooms" value="${esc(c.rooms || "")}" placeholder="2+1"></label>
+    ${advisorField}
+    <label>Notlar<textarea id="c_notes">${esc(c.notes || "")}</textarea></label>
+    <button onclick="saveCustomer()">Kaydet</button>
+    ${msgBlock()}
+  </div>`;
+}
+
+/* ---------- Ofis yönetimi (yalnızca yönetici) ---------- */
+
+function officeView() {
+  const rows = S.members.map(m => {
+    const isMe = m.uid === S.user.uid;
+    return `<div class="item" style="cursor:default">
+      <div class="row"><span class="t">${esc(m.name || "(ad girilmemiş)")}${isMe ? " (siz)" : ""}</span>
+        <span class="badge">${esc(ROLE_LABEL[m.role] || m.role)}</span></div>
+      <div class="s">${esc(m.phone || "telefon yok")}</div>
+      <div class="s uid">${esc(m.uid)}</div>
+      ${isMe ? "" : `<div class="grid" style="margin-top:8px">
+        <button class="small ghost" style="width:100%" onclick="toggleRole('${esc(m.uid)}')">
+          ${m.role === "admin" ? "Danışman yap" : "Yönetici yap"}</button>
+        <button class="small danger" style="width:100%" onclick="removeMember('${esc(m.uid)}')">Ofisten çıkar</button>
+      </div>`}
+    </div>`;
+  }).join("");
+  return `<button class="back" onclick="goHome()">← Ana sayfa</button>
+  <div class="card">
+    <h2>${esc(S.office.name)}</h2>
+    <p class="muted">Üye sayısı: ${S.members.length}</p>
+  </div>
+  <div class="card">
+    <h2>Üye ekle</h2>
+    <p class="muted">Danışman, giriş yaptıktan sonra ekranında gördüğü kimliği (UID) size verir. Bu kimliği girin.</p>
+    <label>Kullanıcı kimliği (UID)<input id="add_uid" placeholder="Örn. NpCMAxxePyX..."></label>
+    <button onclick="addMember()">Üye ekle</button>
+  </div>
+  <div class="card"><h2>Üyeler</h2>${rows || '<p class="muted">Üye yok.</p>'}</div>
+  ${msgBlock()}`;
+}
+
+/* ---------- Render ---------- */
 
 function render() {
   const app = $("app");
@@ -266,13 +423,15 @@ function render() {
     return;
   }
   if (S.office.pending || S.office.disabled) { app.innerHTML = waitingView(); return; }
-  if (S.view === "listings") { app.innerHTML = listingsView(); return; }
-  if (S.view === "detail") { app.innerHTML = detailView(); return; }
-  if (S.view === "form") { app.innerHTML = formView(); return; }
-  app.innerHTML = homeView();
+  const views = {
+    listings: listingsView, detail: listingDetailView, form: listingFormView,
+    customers: customersView, cdetail: customerDetailView, cform: customerFormView,
+    office: officeView
+  };
+  app.innerHTML = (views[S.view] || homeView)();
 }
 
-/* ---------- Eylemler: giriş ---------- */
+/* ---------- Eylemler: giriş ve ofis ---------- */
 
 async function doLogin() {
   const em = $("em").value.trim(), pw = $("pw").value;
@@ -315,13 +474,58 @@ async function createOffice() {
       email: (u.email || "").toLowerCase(), name: nm, phone: ph
     });
     await db.collection("offices").doc(oid).set({
-      name: oname, createdBy: u.uid, pending: true, disabled: true,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      name: oname, createdBy: u.uid, pending: true, disabled: true, createdAt: TS()
     });
     S.pendingProfile = null;
     await refresh();
     setFlash("Ofis açıldı, onay bekleniyor.", true);
   } catch (e) { setFlash("Ofis açılamadı: " + e.message, false); }
+}
+
+async function goOffice() {
+  if (!isAdmin()) return;
+  S.view = "office"; S.msg = "";
+  try { await loadMembers(); } catch (e) { setMsg("Üyeler okunamadı: " + e.message, false); return; }
+  render();
+}
+
+async function addMember() {
+  const uid = $("add_uid").value.trim();
+  if (!uid) return setMsg("Kullanıcı kimliği (UID) girin.", false);
+  if (uid === S.user.uid) return setMsg("Kendinizi ekleyemezsiniz.", false);
+  if (S.members.some(m => m.uid === uid)) return setMsg("Bu kullanıcı zaten ofisinizde.", false);
+  try {
+    await db.collection("users").doc(uid).set({
+      office: S.office.id, role: "member", cid: "c" + uid.slice(0, 8),
+      email: "", name: "", phone: ""
+    });
+    await loadMembers();
+    S.msg = "Üye eklendi. Kullanıcı girişte adını ve telefonunu tamamlayacak."; S.msgOk = true;
+    render();
+  } catch (e) { setMsg("Üye eklenemedi: " + e.message, false); }
+}
+
+async function toggleRole(uid) {
+  const m = S.members.find(x => x.uid === uid);
+  if (!m) return;
+  const next = m.role === "admin" ? "member" : "admin";
+  if (!confirm(`${m.name || uid} ${next === "admin" ? "ofis yöneticisi" : "danışman"} yapılsın mı?`)) return;
+  try {
+    await db.collection("users").doc(uid).update({ role: next });
+    await loadMembers();
+    setMsg("Rol güncellendi.", true);
+  } catch (e) { setMsg("Rol güncellenemedi: " + e.message, false); }
+}
+
+async function removeMember(uid) {
+  const m = S.members.find(x => x.uid === uid);
+  if (!m) return;
+  if (!confirm(`${m.name || uid} ofisten çıkarılsın mı? Portföy ve müşteri kayıtları ofiste kalır.`)) return;
+  try {
+    await db.collection("users").doc(uid).delete();
+    await loadMembers();
+    setMsg("Üye ofisten çıkarıldı.", true);
+  } catch (e) { setMsg("Çıkarılamadı: " + e.message, false); }
 }
 
 /* ---------- Eylemler: portföy ---------- */
@@ -343,6 +547,7 @@ function openListing(id) {
   S.view = "detail"; S.msg = "";
   render();
 }
+function backToListingDetail() { S.view = "detail"; render(); }
 
 function newListing() {
   S.editing = false; S.current = null; S.view = "form"; S.msg = "";
@@ -355,70 +560,145 @@ function editListing() {
   render();
 }
 
-function readForm() {
+function readListingForm() {
   const v = id => ($(id) ? $(id).value.trim() : "");
-  const priceRaw = v("f_price").replace(/\./g, "").replace(/,/g, ".");
   return {
-    title: v("f_title"),
-    type: v("f_type"),
-    district: v("f_district"),
-    price: priceRaw === "" ? null : Number(priceRaw),
-    status: v("f_status"),
-    rooms: v("f_rooms"),
-    m2: v("f_m2"),
-    description: v("f_desc")
+    title: v("f_title"), type: v("f_type"), district: v("f_district"),
+    price: parseMoney(v("f_price")), status: v("f_status"),
+    rooms: v("f_rooms"), m2: v("f_m2"), description: v("f_desc")
   };
 }
 
 async function saveListing() {
-  const d = readForm();
+  const d = readListingForm();
   if (!d.title) return setMsg("Başlık zorunlu.", false);
   if (!d.type) return setMsg("Tür zorunlu.", false);
   if (!d.district) return setMsg("İlçe / mahalle zorunlu.", false);
   if (d.price == null || !isFinite(d.price) || d.price <= 0) return setMsg("Geçerli bir fiyat girin.", false);
   if (!STATUS[d.status]) return setMsg("Durum seçin.", false);
-
-  const ref = db.collection("offices").doc(S.office.id).collection("listings");
+  const ref = officeRef().collection("listings");
   try {
     if (S.editing) {
       if (!canEdit(S.current)) return setMsg("Bu kaydı düzenleme yetkiniz yok.", false);
-      await ref.doc(S.current.id).update(Object.assign(d, {
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      }));
+      await ref.doc(S.current.id).update(Object.assign(d, { updatedAt: TS() }));
       await loadListings();
       S.current = S.listings.find(l => l.id === S.current.id) || null;
-      S.view = "detail";
-      S.msg = "Kaydedildi."; S.msgOk = true;
+      S.view = "detail"; S.msg = "Kaydedildi."; S.msgOk = true;
     } else {
       const created = await ref.add(Object.assign(d, {
-        advisor: S.user.uid,
-        advisorName: S.profile.name,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        advisor: S.user.uid, advisorName: S.profile.name, createdAt: TS(), updatedAt: TS()
       }));
       await loadListings();
       S.current = S.listings.find(l => l.id === created.id) || null;
-      S.view = "detail";
-      S.msg = "Portföy eklendi."; S.msgOk = true;
+      S.view = "detail"; S.msg = "Portföy eklendi."; S.msgOk = true;
     }
     render();
-  } catch (e) {
-    setMsg("Kaydedilemedi: " + e.message, false);
-  }
+  } catch (e) { setMsg("Kaydedilemedi: " + e.message, false); }
 }
 
 async function deleteListing() {
   if (!canEdit(S.current)) return setMsg("Bu kaydı silme yetkiniz yok.", false);
   if (!confirm("Bu portföy silinsin mi?")) return;
   try {
-    await db.collection("offices").doc(S.office.id).collection("listings").doc(S.current.id).delete();
+    await officeRef().collection("listings").doc(S.current.id).delete();
     await loadListings();
     S.current = null; S.view = "listings";
     S.msg = "Portföy silindi."; S.msgOk = true;
     render();
-  } catch (e) {
-    setMsg("Silinemedi: " + e.message, false);
+  } catch (e) { setMsg("Silinemedi: " + e.message, false); }
+}
+
+/* ---------- Eylemler: müşteri ---------- */
+
+async function goCustomers() {
+  S.view = "customers"; S.msg = "";
+  try {
+    await loadCustomers();
+    if (isAdmin()) await loadMembers();
+  } catch (e) { setMsg("Müşteriler okunamadı: " + e.message, false); return; }
+  render();
+}
+
+function setCKind(v) { S.cKind = v; render(); }
+function setCStatus(v) { S.cStatus = v; render(); }
+function setCQ(v) { S.cq = v; render(); }
+
+function openCustomer(id) {
+  S.currentCust = S.customers.find(c => c.id === id) || null;
+  if (!S.currentCust) return setMsg("Kayıt bulunamadı.", false);
+  S.view = "cdetail"; S.msg = "";
+  render();
+}
+function backToCustomerDetail() { S.view = "cdetail"; render(); }
+
+async function newCustomer() {
+  S.editingCust = false; S.currentCust = null; S.msg = "";
+  if (isAdmin() && !S.members.length) { try { await loadMembers(); } catch (e) {} }
+  S.view = "cform";
+  render();
+}
+
+async function editCustomer() {
+  if (!canEdit(S.currentCust)) return setMsg("Bu müşteriyi düzenleme yetkiniz yok.", false);
+  S.editingCust = true; S.msg = "";
+  if (isAdmin() && !S.members.length) { try { await loadMembers(); } catch (e) {} }
+  S.view = "cform";
+  render();
+}
+
+function readCustomerForm() {
+  const v = id => ($(id) ? $(id).value.trim() : "");
+  return {
+    name: v("c_name"), phone: v("c_phone"), kind: v("c_kind"), status: v("c_status"),
+    district: v("c_district"), budgetMin: parseMoney(v("c_bmin")), budgetMax: parseMoney(v("c_bmax")),
+    rooms: v("c_rooms"), notes: v("c_notes")
+  };
+}
+
+async function saveCustomer() {
+  const d = readCustomerForm();
+  if (!d.name) return setMsg("Ad soyad zorunlu.", false);
+  if (!phoneOk(d.phone)) return setMsg("Geçerli bir telefon numarası girin.", false);
+  if (!KIND[d.kind]) return setMsg("Tür seçin.", false);
+  if (!CSTATUS[d.status]) return setMsg("Durum seçin.", false);
+  if (d.budgetMin != null && d.budgetMax != null && d.budgetMin > d.budgetMax)
+    return setMsg("Bütçe min, max değerinden büyük olamaz.", false);
+
+  // Danışman seçimi: yalnızca yönetici değiştirebilir; diğerleri kendi adına kaydeder
+  let advisor = S.user.uid, advisorName = S.profile.name;
+  if (isAdmin() && $("f_advisor")) {
+    advisor = $("f_advisor").value;
+    advisorName = memberName(advisor);
   }
+  const data = Object.assign(d, { advisor, advisorName });
+  const ref = officeRef().collection("customers");
+  try {
+    if (S.editingCust) {
+      if (!canEdit(S.currentCust)) return setMsg("Bu müşteriyi düzenleme yetkiniz yok.", false);
+      await ref.doc(S.currentCust.id).update(Object.assign(data, { updatedAt: TS() }));
+      await loadCustomers();
+      S.currentCust = S.customers.find(c => c.id === S.currentCust.id) || null;
+      S.view = "cdetail"; S.msg = "Kaydedildi."; S.msgOk = true;
+    } else {
+      const created = await ref.add(Object.assign(data, { createdAt: TS(), updatedAt: TS() }));
+      await loadCustomers();
+      S.currentCust = S.customers.find(c => c.id === created.id) || null;
+      S.view = "cdetail"; S.msg = "Müşteri eklendi."; S.msgOk = true;
+    }
+    render();
+  } catch (e) { setMsg("Kaydedilemedi: " + e.message, false); }
+}
+
+async function deleteCustomer() {
+  if (!canEdit(S.currentCust)) return setMsg("Bu müşteriyi silme yetkiniz yok.", false);
+  if (!confirm("Bu müşteri silinsin mi?")) return;
+  try {
+    await officeRef().collection("customers").doc(S.currentCust.id).delete();
+    await loadCustomers();
+    S.currentCust = null; S.view = "customers";
+    S.msg = "Müşteri silindi."; S.msgOk = true;
+    render();
+  } catch (e) { setMsg("Silinemedi: " + e.message, false); }
 }
 
 /* ---------- Oturum ---------- */
