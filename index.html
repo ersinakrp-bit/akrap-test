@@ -9,22 +9,35 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <style>
 *{box-sizing:border-box}
-body{margin:0;font:16px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;background:#eef2f7;color:#0f172a;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0)}
-main{max-width:520px;margin:0 auto;padding:16px}
-.card{background:#fff;border-radius:14px;padding:18px;margin-bottom:14px;box-shadow:0 1px 3px rgba(15,23,42,.08)}
+body{margin:0;font:16px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;background:#eef2f7;color:#0f172a}
+main{max-width:560px;margin:0 auto;padding:16px}
+.card{background:#fff;border-radius:14px;padding:16px;margin-bottom:12px;box-shadow:0 1px 3px rgba(15,23,42,.08)}
 h1{font-size:22px;margin:4px 0 12px}
 h2{font-size:17px;margin:0 0 8px}
 label{display:block;font-size:13px;color:#475569;margin-top:10px}
-input{width:100%;padding:11px;margin-top:4px;font:inherit;border:1px solid #cbd5e1;border-radius:10px}
-button{width:100%;padding:12px;margin-top:12px;font:inherit;font-weight:600;border:0;border-radius:10px;background:#1e40af;color:#fff;cursor:pointer}
+input,select,textarea{width:100%;padding:11px;margin-top:4px;font:inherit;border:1px solid #cbd5e1;border-radius:10px;background:#fff}
+textarea{min-height:80px;resize:vertical}
+button{width:100%;padding:12px;margin-top:10px;font:inherit;font-weight:600;border:0;border-radius:10px;background:#1e40af;color:#fff;cursor:pointer}
 button.ghost{background:#e2e8f0;color:#0f172a}
+button.danger{background:#b91c1c}
+button.small{width:auto;padding:8px 12px;margin:0;font-size:14px}
 button:disabled{opacity:.5}
 .muted{color:#64748b;font-size:14px}
 .err{color:#b91c1c;font-size:14px;margin-top:8px;min-height:18px}
 .ok{color:#15803d;font-size:14px;margin-top:8px;min-height:18px}
 .uid{word-break:break-all;background:#f1f5f9;padding:8px;border-radius:8px;font-size:13px}
 .row{display:flex;justify-content:space-between;align-items:center;gap:8px}
-.badge{font-size:12px;background:#dbeafe;color:#1e40af;padding:3px 9px;border-radius:99px}
+.badge{font-size:12px;background:#dbeafe;color:#1e40af;padding:3px 9px;border-radius:99px;white-space:nowrap}
+.badge.st-satildi{background:#fee2e2;color:#991b1b}
+.badge.st-kiralandi{background:#fef3c7;color:#92400e}
+.badge.st-aktif{background:#dcfce7;color:#166534}
+.item{display:block;width:100%;text-align:left;background:#fff;color:#0f172a;border:1px solid #e2e8f0;margin:0 0 8px;padding:12px}
+.item .t{font-weight:600}
+.item .s{font-size:14px;color:#64748b}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.kv{display:grid;grid-template-columns:110px 1fr;gap:6px 10px;font-size:15px;margin-top:8px}
+.kv div:nth-child(odd){color:#64748b}
+.back{background:none;color:#1e40af;width:auto;padding:4px 0;margin:0 0 8px}
 </style>
 </head>
 <body>
@@ -43,9 +56,13 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
-const SYS_EMAILS = ["akrpersin@gmail.com"];
 
-const S = { ready: false, user: null, profile: null, office: null, flash: "", flashOk: false };
+const S = {
+  ready: false, user: null, profile: null, office: null,
+  flash: "", flashOk: false,
+  view: "home", listings: [], current: null, editing: false,
+  filterStatus: "all", q: "", msg: "", msgOk: false
+};
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const phoneOk = p => { const d = String(p || "").replace(/\D/g, ""); return d.length >= 10 && d.length <= 13; };
@@ -56,12 +73,15 @@ const AUTH_MSG = {
   "auth/too-many-requests": "Çok fazla deneme. Biraz bekleyin.",
   "auth/operation-not-allowed": "E-posta ile giriş etkin değil (Firebase ayarlarını kontrol edin)."
 };
+const LISTING_TYPES = ["Daire", "Villa", "Arsa", "Dükkan", "Ofis", "Diğer"];
+const STATUS = { aktif: "Aktif", satildi: "Satıldı", kiralandi: "Kiralandı" };
+const money = n => (n == null || n === "") ? "-" : Number(n).toLocaleString("tr-TR") + " ₺";
+const slug = s => String(s).toLowerCase()
+  .replace(/ğ/g,"g").replace(/ü/g,"u").replace(/ş/g,"s").replace(/ı/g,"i").replace(/ö/g,"o").replace(/ç/g,"c")
+  .replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,20) || "ofis";
 
-function slug(s) {
-  return String(s).toLowerCase()
-    .replace(/ğ/g,"g").replace(/ü/g,"u").replace(/ş/g,"s").replace(/ı/g,"i").replace(/ö/g,"o").replace(/ç/g,"c")
-    .replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,20) || "ofis";
-}
+function isAdmin() { return S.profile && S.profile.role === "admin"; }
+function canEdit(l) { return !!l && (l.advisor === S.user.uid || isAdmin()); }
 
 async function loadState() {
   S.profile = null; S.office = null;
@@ -76,7 +96,16 @@ async function loadState() {
   }
 }
 
+async function loadListings() {
+  const sn = await db.collection("offices").doc(S.office.id).collection("listings")
+    .orderBy("createdAt", "desc").get();
+  S.listings = sn.docs.map(d => Object.assign({ id: d.id }, d.data()));
+}
+
 function setFlash(msg, ok) { S.flash = msg; S.flashOk = !!ok; render(); }
+function setMsg(msg, ok) { S.msg = msg; S.msgOk = !!ok; render(); }
+
+/* ---------- Giriş ve ofis (önceki akış) ---------- */
 
 function loginView() {
   return `<div class="card">
@@ -92,14 +121,13 @@ function setupView() {
   const p = S.profile || {};
   return `<div class="card">
     <h2>Bilgilerinizi tamamlayın</h2>
-    <p class="muted">Ad ve telefon numarası zorunludur. Telefon müşterilere gönderilen bilgilerde kullanılır.</p>
+    <p class="muted">Ad ve telefon numarası zorunludur.</p>
     <label>Ad soyad<input id="nm" value="${esc(p.name || "")}"></label>
     <label>Telefon<input id="ph" type="tel" placeholder="05xx xxx xx xx" value="${esc(p.phone || "")}"></label>
     <button onclick="saveProfile()">Kaydet</button>
     <div class="ok">${S.flashOk ? esc(S.flash) : ""}</div>
     <div class="err">${S.flashOk ? "" : esc(S.flash)}</div>
   </div>
-  ${p.name && phoneOk(p.phone) ? "" : ""}
   ${S.profile ? "" : newOfficeView()}
   <div class="card"><p class="muted">Mevcut bir ofise katılmak için ofis yöneticiniz sizi ekleyecek. Yöneticinize aşağıdaki kimliği verin:</p>
     <div class="uid">${esc(S.user.uid)}</div></div>
@@ -123,19 +151,108 @@ function waitingView() {
   <button class="ghost" onclick="doLogout()">Çıkış yap</button>`;
 }
 
+/* ---------- Ana sayfa ---------- */
+
 function homeView() {
   const p = S.profile;
-  const isAdmin = p.role === "admin";
   return `<div class="card">
     <div class="row"><h2>${esc(S.office.name)}</h2><span class="badge">${esc(ROLE_LABEL[p.role] || p.role)}</span></div>
     <p class="muted">Merhaba ${esc(p.name)} · ${esc(p.phone)}</p>
   </div>
   <div class="card"><h2>Menü</h2>
-    <button disabled>Portföy (sonraki adım)</button>
+    <button onclick="goListings()">Portföy</button>
     <button disabled>Müşteriler (sonraki adım)</button>
-    ${isAdmin ? '<button disabled>Ofis yönetimi (sonraki adım)</button>' : ""}
+    ${isAdmin() ? '<button disabled>Ofis yönetimi (sonraki adım)</button>' : ""}
   </div>
   <button class="ghost" onclick="doLogout()">Çıkış yap</button>`;
+}
+
+/* ---------- Portföy ---------- */
+
+function listingsView() {
+  const filtered = S.listings.filter(l => {
+    if (S.filterStatus !== "all" && l.status !== S.filterStatus) return false;
+    if (S.q) {
+      const hay = [l.title, l.district, l.type, l.advisorName].join(" ").toLowerCase();
+      if (!hay.includes(S.q.toLowerCase())) return false;
+    }
+    return true;
+  });
+  const items = filtered.length
+    ? filtered.map(l => `<button class="item" onclick="openListing('${esc(l.id)}')">
+        <div class="row"><span class="t">${esc(l.title)}</span>
+          <span class="badge st-${esc(l.status)}">${esc(STATUS[l.status] || l.status)}</span></div>
+        <div class="s">${esc(l.type)} · ${esc(l.district)} · ${money(l.price)}</div>
+        <div class="s">Danışman: ${esc(l.advisorName || "-")}</div>
+      </button>`).join("")
+    : `<p class="muted">Kayıt bulunamadı.</p>`;
+
+  return `<button class="back" onclick="goHome()">← Ana sayfa</button>
+  <div class="card">
+    <div class="row"><h2>Portföy (${S.listings.length})</h2>
+      <button class="small" onclick="newListing()">+ Yeni</button></div>
+    <div class="grid">
+      <div><label>Durum<select onchange="setFilter(this.value)">
+        <option value="all" ${S.filterStatus === "all" ? "selected" : ""}>Tümü</option>
+        ${Object.keys(STATUS).map(k => `<option value="${k}" ${S.filterStatus === k ? "selected" : ""}>${STATUS[k]}</option>`).join("")}
+      </select></label></div>
+      <div><label>Ara<input value="${esc(S.q)}" oninput="setQ(this.value)" placeholder="Başlık, ilçe, tür"></label></div>
+    </div>
+    <div class="ok">${S.msgOk ? esc(S.msg) : ""}</div>
+    <div class="err">${S.msgOk ? "" : esc(S.msg)}</div>
+  </div>
+  <div>${items}</div>`;
+}
+
+function detailView() {
+  const l = S.current;
+  const edit = canEdit(l);
+  return `<button class="back" onclick="goListings()">← Portföy listesi</button>
+  <div class="card">
+    <div class="row"><h2>${esc(l.title)}</h2>
+      <span class="badge st-${esc(l.status)}">${esc(STATUS[l.status] || l.status)}</span></div>
+    <div class="kv">
+      <div>Tür</div><div>${esc(l.type)}</div>
+      <div>İlçe</div><div>${esc(l.district)}</div>
+      <div>Fiyat</div><div>${money(l.price)}</div>
+      <div>Oda</div><div>${esc(l.rooms || "-")}</div>
+      <div>m²</div><div>${esc(l.m2 || "-")}</div>
+      <div>Danışman</div><div>${esc(l.advisorName || "-")}</div>
+    </div>
+    ${l.description ? `<p style="white-space:pre-wrap">${esc(l.description)}</p>` : ""}
+    ${edit
+      ? `<div class="grid"><button onclick="editListing()">Düzenle</button>
+          <button class="danger" onclick="deleteListing()">Sil</button></div>`
+      : `<p class="muted">Bu portföy size ait değil; yalnızca görüntüleyebilirsiniz.</p>`}
+    <div class="ok">${S.msgOk ? esc(S.msg) : ""}</div>
+    <div class="err">${S.msgOk ? "" : esc(S.msg)}</div>
+  </div>`;
+}
+
+function formView() {
+  const l = S.editing ? S.current : {};
+  const opt = (arr, val) => arr.map(v => `<option value="${esc(v)}" ${val === v ? "selected" : ""}>${esc(v)}</option>`).join("");
+  return `<button class="back" onclick="${S.editing ? "openListing('" + esc(l.id) + "')" : "goListings()"}">← Geri</button>
+  <div class="card">
+    <h2>${S.editing ? "Portföyü düzenle" : "Yeni portföy"}</h2>
+    <p class="muted"><b>*</b> ile işaretli alanlar zorunludur.</p>
+    <label>Başlık *<input id="f_title" value="${esc(l.title || "")}"></label>
+    <label>Tür *<select id="f_type">${opt(LISTING_TYPES, l.type || "Daire")}</select></label>
+    <label>İlçe / mahalle *<input id="f_district" value="${esc(l.district || "")}"></label>
+    <div class="grid">
+      <label>Fiyat (₺) *<input id="f_price" inputmode="numeric" value="${esc(l.price ?? "")}"></label>
+      <label>Durum *<select id="f_status">
+        ${Object.keys(STATUS).map(k => `<option value="${k}" ${(l.status || "aktif") === k ? "selected" : ""}>${STATUS[k]}</option>`).join("")}
+      </select></label>
+    </div>
+    <div class="grid">
+      <label>Oda<input id="f_rooms" value="${esc(l.rooms || "")}" placeholder="2+1"></label>
+      <label>m²<input id="f_m2" inputmode="numeric" value="${esc(l.m2 || "")}"></label>
+    </div>
+    <label>Açıklama<textarea id="f_desc">${esc(l.description || "")}</textarea></label>
+    <button onclick="saveListing()">Kaydet</button>
+    <div class="err">${S.msgOk ? "" : esc(S.msg)}</div>
+  </div>`;
 }
 
 function render() {
@@ -149,19 +266,20 @@ function render() {
     return;
   }
   if (S.office.pending || S.office.disabled) { app.innerHTML = waitingView(); return; }
+  if (S.view === "listings") { app.innerHTML = listingsView(); return; }
+  if (S.view === "detail") { app.innerHTML = detailView(); return; }
+  if (S.view === "form") { app.innerHTML = formView(); return; }
   app.innerHTML = homeView();
 }
+
+/* ---------- Eylemler: giriş ---------- */
 
 async function doLogin() {
   const em = $("em").value.trim(), pw = $("pw").value;
   if (!em || !pw) return setFlash("E-posta ve şifre gerekli.", false);
-  try {
-    await auth.signInWithEmailAndPassword(em, pw);
-  } catch (e) {
-    setFlash(AUTH_MSG[e.code] || ("Giriş hatası: " + e.message), false);
-  }
+  try { await auth.signInWithEmailAndPassword(em, pw); }
+  catch (e) { setFlash(AUTH_MSG[e.code] || ("Giriş hatası: " + e.message), false); }
 }
-
 async function doLogout() { await auth.signOut(); }
 
 async function saveProfile() {
@@ -173,16 +291,13 @@ async function saveProfile() {
     const sn = await ref.get();
     if (sn.exists) {
       await ref.update({ name: nm, phone: ph });
+      await refresh();
+      setFlash("Kaydedildi.", true);
     } else {
-      // Mevcut ofise bağlı değilse profil yalnızca ad ve telefonla oluşturulamaz (ofis gerekir); profil ofis açılırken oluşur.
       S.pendingProfile = { name: nm, phone: ph };
-      return setFlash("Bilgiler kaydedildi. Şimdi ofisinizi açın.", true);
+      setFlash("Bilgiler kaydedildi. Şimdi ofisinizi açın.", true);
     }
-    await refresh();
-    setFlash("Kaydedildi.", true);
-  } catch (e) {
-    setFlash("Kaydedilemedi: " + e.message, false);
-  }
+  } catch (e) { setFlash("Kaydedilemedi: " + e.message, false); }
 }
 
 async function createOffice() {
@@ -195,7 +310,6 @@ async function createOffice() {
   const u = S.user;
   const oid = slug(oname) + "-" + Math.random().toString(36).slice(2, 6);
   try {
-    // Kullanıcı belgesi önce yazılır: kural, ofis belgesi henüz yokken yöneticiliğe izin verir.
     await db.collection("users").doc(u.uid).set({
       office: oid, role: "admin", cid: "c" + u.uid.slice(0, 8),
       email: (u.email || "").toLowerCase(), name: nm, phone: ph
@@ -207,10 +321,107 @@ async function createOffice() {
     S.pendingProfile = null;
     await refresh();
     setFlash("Ofis açıldı, onay bekleniyor.", true);
+  } catch (e) { setFlash("Ofis açılamadı: " + e.message, false); }
+}
+
+/* ---------- Eylemler: portföy ---------- */
+
+async function goHome() { S.view = "home"; S.msg = ""; render(); }
+
+async function goListings() {
+  S.view = "listings"; S.msg = "";
+  try { await loadListings(); } catch (e) { setMsg("Portföy okunamadı: " + e.message, false); return; }
+  render();
+}
+
+function setFilter(v) { S.filterStatus = v; render(); }
+function setQ(v) { S.q = v; render(); }
+
+function openListing(id) {
+  S.current = S.listings.find(l => l.id === id) || null;
+  if (!S.current) return setMsg("Kayıt bulunamadı.", false);
+  S.view = "detail"; S.msg = "";
+  render();
+}
+
+function newListing() {
+  S.editing = false; S.current = null; S.view = "form"; S.msg = "";
+  render();
+}
+
+function editListing() {
+  if (!canEdit(S.current)) return setMsg("Bu kaydı düzenleme yetkiniz yok.", false);
+  S.editing = true; S.view = "form"; S.msg = "";
+  render();
+}
+
+function readForm() {
+  const v = id => ($(id) ? $(id).value.trim() : "");
+  const priceRaw = v("f_price").replace(/\./g, "").replace(/,/g, ".");
+  return {
+    title: v("f_title"),
+    type: v("f_type"),
+    district: v("f_district"),
+    price: priceRaw === "" ? null : Number(priceRaw),
+    status: v("f_status"),
+    rooms: v("f_rooms"),
+    m2: v("f_m2"),
+    description: v("f_desc")
+  };
+}
+
+async function saveListing() {
+  const d = readForm();
+  if (!d.title) return setMsg("Başlık zorunlu.", false);
+  if (!d.type) return setMsg("Tür zorunlu.", false);
+  if (!d.district) return setMsg("İlçe / mahalle zorunlu.", false);
+  if (d.price == null || !isFinite(d.price) || d.price <= 0) return setMsg("Geçerli bir fiyat girin.", false);
+  if (!STATUS[d.status]) return setMsg("Durum seçin.", false);
+
+  const ref = db.collection("offices").doc(S.office.id).collection("listings");
+  try {
+    if (S.editing) {
+      if (!canEdit(S.current)) return setMsg("Bu kaydı düzenleme yetkiniz yok.", false);
+      await ref.doc(S.current.id).update(Object.assign(d, {
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      }));
+      await loadListings();
+      S.current = S.listings.find(l => l.id === S.current.id) || null;
+      S.view = "detail";
+      S.msg = "Kaydedildi."; S.msgOk = true;
+    } else {
+      const created = await ref.add(Object.assign(d, {
+        advisor: S.user.uid,
+        advisorName: S.profile.name,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      }));
+      await loadListings();
+      S.current = S.listings.find(l => l.id === created.id) || null;
+      S.view = "detail";
+      S.msg = "Portföy eklendi."; S.msgOk = true;
+    }
+    render();
   } catch (e) {
-    setFlash("Ofis açılamadı: " + e.message, false);
+    setMsg("Kaydedilemedi: " + e.message, false);
   }
 }
+
+async function deleteListing() {
+  if (!canEdit(S.current)) return setMsg("Bu kaydı silme yetkiniz yok.", false);
+  if (!confirm("Bu portföy silinsin mi?")) return;
+  try {
+    await db.collection("offices").doc(S.office.id).collection("listings").doc(S.current.id).delete();
+    await loadListings();
+    S.current = null; S.view = "listings";
+    S.msg = "Portföy silindi."; S.msgOk = true;
+    render();
+  } catch (e) {
+    setMsg("Silinemedi: " + e.message, false);
+  }
+}
+
+/* ---------- Oturum ---------- */
 
 async function refresh() {
   await loadState();
